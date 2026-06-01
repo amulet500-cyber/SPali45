@@ -1,7 +1,7 @@
 // --- ส่วนป้องกันเมนูเด้ง ---
-document.addEventListener('contextmenu', event => event.preventDefault());
-document.addEventListener('copy', event => event.preventDefault());
-document.addEventListener('selectstart', event => event.preventDefault());
+// document.addEventListener('contextmenu', event => event.preventDefault());
+// document.addEventListener('copy', event => event.preventDefault());
+// document.addEventListener('selectstart', event => event.preventDefault());
 
 let dictionary = {};
 let currentThaiContent = "";
