@@ -2,80 +2,41 @@
 @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600&display=swap');
 
 /* --- ตั้งค่าพื้นฐาน --- */
-body { 
-    font-family: 'Sarabun', 'Tahoma', sans-serif; 
-    padding: 20px; 
-    background-color: #fdfaf6; 
+body {
+    font-family: 'Sarabun', 'Tahoma', sans-serif;
+    padding: 20px;
+    background-color: #fdfaf6;
     color: #4e342e;
     margin: 0;
     touch-action: manipulation;
 }
 
-h1 { 
-    color: #4e342e; 
-    text-align: center; 
-    margin-bottom: 30px; 
-    font-size: 32px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
-    padding-bottom: 15px;
-    border-bottom: 2px solid rgba(212, 163, 115, 0.5);
-    display: inline-block;
-    width: 100%;
+h1 {
+    color: #5d4037;
+    text-align: center;
+    margin-bottom: 20px;
+    font-size: 28px;
 }
 
-.control-panel { 
-    text-align: center; 
-    margin-bottom: 20px; 
+.control-panel {
+    text-align: center;
+    margin-bottom: 20px;
     transition: all 0.3s ease;
 }
 
-/* --- ช่องเลือกเล่ม (Dropdown) --- */
-#book-selector { 
-    padding: 12px 20px; 
-    font-size: 18px; 
-    border-radius: 20px; 
-    cursor: pointer; 
-    width: 90%;
-    max-width: 400px;
-    border: 2px solid #d4a373; 
-    background-color: #fffdf5; 
-    color: #4e342e;
-    appearance: none; 
-    background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%234e342e%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E');
-    background-repeat: no-repeat;
-    background-position: right 15px top 50%;
-    background-size: 12px auto;
-    transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
-    outline: none;
-}
-
-#book-selector:hover {
-    border-color: #8d6e63;
-    background-color: #fdfaf6;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.05);
-}
-
-#book-selector:focus {
-    border-color: #5d4037;
-    background-color: #ffffff;
-    box-shadow: 0 0 8px rgba(93, 64, 55, 0.2);
-}
-
 /* --- เนื้อหาบาลี --- */
-#pali-content { 
-    background-color: #fdfaf6; 
-    padding: 30px; 
-    border-radius: 15px; 
-    box-shadow: 0 4px 15px rgba(0,0,0,0.05); 
-    line-height: 2.4; 
-    font-size: 24px; 
-    white-space: pre-wrap; 
-    max-width: 900px; 
+#pali-content {
+    background-color: #fdfaf6;
+    padding: 30px;
+    border-radius: 15px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    line-height: 2.4;
+    font-size: 24px;
+    white-space: pre-wrap;
+    max-width: 900px;
     margin: 0 auto;
     text-align: justify;
-    -webkit-user-select: text; 
+    -webkit-user-select: text;
     user-select: text;
     -webkit-touch-callout: none;
     -webkit-tap-highlight-color: transparent;
@@ -83,9 +44,9 @@ h1 {
     touch-action: manipulation;
 }
 
-#pali-content ::selection { 
-    background: transparent; 
-    color: inherit; 
+#pali-content ::selection {
+    background: transparent;
+    color: inherit;
 }
 
 /* --- กล่องแสดงผล --- */
@@ -94,19 +55,19 @@ h1 {
     margin: 20px auto;
 }
 
-.translation-card { 
-    background: #fffdf5; 
-    border: 2px solid #FFD700; 
-    border-radius: 15px; 
-    padding: 25px; 
-    box-shadow: 0 4px 10px rgba(0,0,0,0.1); 
+.translation-card {
+    background: #fffdf5;
+    border: 2px solid #FFD700;
+    border-radius: 15px;
+    padding: 25px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
     line-height: 1.8;
     color: #4e342e;
     font-size: 18px;
 }
 
 /* --- ป๊อปอัปด้านล่าง --- */
-#popup { 
+#popup {
     position: fixed;
     bottom: 0;
     left: 0;
@@ -122,16 +83,15 @@ h1 {
     box-shadow: 0 -4px 15px rgba(0,0,0,0.4);
     z-index: 1000;
     pointer-events: none;
-    backdrop-filter: blur(10px);
 }
 
-#selected-word { 
-    display: block; 
-    font-size: 24px; 
+#selected-word {
+    display: block;
+    font-size: 24px;
     line-height: 1.6;
-    word-wrap: break-word; 
-    max-height: 200px; 
-    overflow-y: auto; 
+    word-wrap: break-word;
+    max-height: 200px;
+    overflow-y: auto;
     pointer-events: auto;
 }
 
@@ -154,13 +114,45 @@ h1 {
     pointer-events: none;
 }
 
+/* --- ตกแต่งช่องเลือกเล่ม (Dropdown) --- */
+#book-selector {
+    padding: 12px 20px;
+    font-size: 18px;
+    border-radius: 20px;
+    cursor: pointer;
+    width: 90%;
+    max-width: 400px;
+    border: 2px solid #d4a373;
+    background-color: #fffdf5;
+    color: #4e342e;
+    appearance: none;
+    background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%234e342e%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E');
+    background-repeat: no-repeat;
+    background-position: right 15px top 50%;
+    background-size: 12px auto;
+    transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+    outline: none;
+}
+
+#book-selector:hover {
+    border-color: #8d6e63;
+    background-color: #fdfaf6;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+}
+
+#book-selector:focus {
+    border-color: #5d4037;
+    background-color: #ffffff;
+    box-shadow: 0 0 8px rgba(93, 64, 55, 0.2);
+}
+
 /* --- Responsive --- */
 @media (max-width: 600px) {
     body { padding: 10px; }
-    h1 { font-size: 20px; } 
-    #pali-content { 
-        font-size: 22px; 
-        padding: 15px; 
+    h1 { font-size: 20px; }
+    #pali-content {
+        font-size: 22px;
+        padding: 15px;
         line-height: 2.0;
     }
 }
