@@ -140,13 +140,13 @@ h1 {
     }
 }
 
-/* --- Responsive สำหรับ Tablet / Redmi Pad (ปรับเพิ่มอีก 15% จากค่าก่อนหน้า) --- */
+/* --- Responsive สำหรับ Tablet / Redmi Pad (ปรับเพิ่มอีก 20% จากค่าก่อนหน้า) --- */
 @media (min-width: 601px) and (max-width: 1024px) {
-    h1 { font-size: 11.5px !important; }
+    h1 { font-size: 16.5px !important; }
     #pali-content { 
-        font-size: 10.5px !important; 
-        line-height: 1.5 !important; 
-        padding: 9px !important;
+        font-size: 15px !important; 
+        line-height: 1.7 !important; 
+        padding: 12px !important;
     }
-    #book-selector { font-size: 10.5px !important; padding: 6px 9px !important; }
+    #book-selector { font-size: 15px !important; padding: 8px 12px !important; }
 }
