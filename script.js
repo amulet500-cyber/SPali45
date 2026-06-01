@@ -78,14 +78,17 @@ selector.addEventListener('change', async (e) => {
     currentThaiContent = "";
     try {
         const [paliRes, thaiRes] = await Promise.all([fetch(`b${bookNum}.txt`), fetch(`t${bookNum}.txt`)]);
-        contentDiv.innerText = await paliRes.text();
+        let paliText = await paliRes.text();
+        
+        // ระบายสีเลขหัวข้อและทำให้คลิกทะลุได้
+        paliText = paliText.replace(/^(\[[๑-๙๐-๙]+\])/gm, '<span class="pali-number" style="pointer-events: none;">$1</span>');
+        contentDiv.innerHTML = paliText;
+        
         currentThaiContent = await thaiRes.text();
     } catch (err) { contentDiv.innerText = "ไม่พบไฟล์เล่มที่ " + bookNum; }
 });
 
-// --- ส่วนจัดการคลิก (สร้างสีเหลืองที่คำ แทนการเลือกข้อความ) ---
 document.getElementById('pali-content').addEventListener('click', (e) => {
-    // 1. ล้างสีเก่าออกก่อน
     const currentHighlights = document.querySelectorAll('.highlight-pali');
     currentHighlights.forEach(el => {
         const parent = el.parentNode;
@@ -105,7 +108,6 @@ document.getElementById('pali-content').addEventListener('click', (e) => {
             const word = t.substring(start, end).trim();
             if (!word) return;
 
-            // 2. สร้าง Span เพื่อให้เป็นสี
             const span = document.createElement('span');
             span.className = 'highlight-pali';
             span.textContent = word;
@@ -116,7 +118,6 @@ document.getElementById('pali-content').addEventListener('click', (e) => {
             range.deleteContents();
             range.insertNode(span);
 
-            // 3. แสดงผลแปล
             if (/^\[[๑-๙๐-๙]+\]$/.test(word)) {
                 showTranslation(word);
             } else {
