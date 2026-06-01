@@ -15,7 +15,7 @@ h1 {
     color: #5d4037;
     text-align: center;
     margin-bottom: 20px;
-    font-size: 20px; /* ปรับลดลง */
+    font-size: 20px;
 }
 
 .control-panel {
@@ -23,7 +23,7 @@ h1 {
     margin-bottom: 20px;
 }
 
-/* --- เนื้อหาบาลี (ลดขนาดลงจาก 24px เหลือ 18px เพื่อให้ดูสบายตาขึ้น) --- */
+/* --- เนื้อหาบาลี --- */
 #pali-content {
     background-color: #fdfaf6;
     padding: 20px;
@@ -62,7 +62,7 @@ h1 {
     box-shadow: 0 4px 10px rgba(0,0,0,0.1);
     line-height: 1.6;
     color: #4e342e;
-    font-size: 16px; /* ปรับลดลง */
+    font-size: 16px;
 }
 
 /* --- ป๊อปอัปด้านล่าง --- */
@@ -86,7 +86,7 @@ h1 {
 
 #selected-word {
     display: block;
-    font-size: 18px; /* ปรับลดลง */
+    font-size: 18px;
     line-height: 1.5;
     word-wrap: break-word;
     max-height: 150px;
@@ -97,7 +97,7 @@ h1 {
 /* --- ตกแต่งช่องเลือกเล่ม --- */
 #book-selector {
     padding: 10px 15px;
-    font-size: 16px; /* ปรับลดลง */
+    font-size: 16px;
     border-radius: 20px;
     cursor: pointer;
     width: 90%;
@@ -129,7 +129,7 @@ h1 {
     pointer-events: none;
 }
 
-/* --- Responsive --- */
+/* --- Responsive สำหรับมือถือ --- */
 @media (max-width: 600px) {
     body { padding: 10px; }
     h1 { font-size: 18px; }
@@ -138,4 +138,15 @@ h1 {
         padding: 12px;
         line-height: 1.8;
     }
+}
+
+/* --- Responsive สำหรับ Tablet / Redmi Pad (ลดขนาดอีก 50% ตามสั่ง) --- */
+@media (min-width: 601px) and (max-width: 1024px) {
+    h1 { font-size: 14px !important; }
+    #pali-content { 
+        font-size: 12px !important; 
+        line-height: 1.4 !important; 
+        padding: 10px !important;
+    }
+    #book-selector { font-size: 12px !important; padding: 6px 10px !important; }
 }
