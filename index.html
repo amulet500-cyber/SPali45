@@ -5,49 +5,43 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>พระไตรปิฎกบาลีสยามรัฐ ฉบับบาลีศึกษา</title>
     
-    <!-- เชื่อมต่อไฟล์ CSS และ Manifest สำหรับติดตั้งเป็นแอป -->
     <link rel="stylesheet" href="style.css">
     <link rel="manifest" href="manifest.json">
     
-    <!-- ตั้งค่าสำหรับ iOS ให้ดูเหมือนแอป -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
     <meta name="apple-mobile-web-app-title" content="คลังพระไตรปิฎก">
 </head>
 <body>
     <h1>พระไตรปิฎกบาลีสยามรัฐ ฉบับบาลีศึกษา แปลคำบาลีไทย</h1>
+    
     <div class="control-panel">
         <select id="book-selector">
             <option value="">-- กรุณาเลือกเล่มที่ต้องการอ่าน --</option>
         </select>
     </div>
+
     <div id="pali-content">โปรดเลือกเล่มจากรายการด้านบน เพื่อเริ่มอ่านพระไตรปิฎก</div>
-    <div id="popup"><span id="selected-word">...</span></div>
     
-    <!-- เพิ่มปุ่มนี้ไว้ท้ายหน้าเว็บ -->
+    <div id="translation-box"></div>
+    
+    <div id="dictionary-box"></div>
+    
+    <div id="popup">
+        <span id="selected-word">...</span>
+    </div>
+    
     <div class="footer">
         <button id="about-btn">เกี่ยวกับผู้เขียน</button>
     </div>
 
-    <!-- เพิ่มส่วนแสดงหน้าต่าง Modal นี้ไว้ก่อนปิดแท็ก </body> -->
     <div id="about-modal" class="modal">
         <div class="modal-content">
             <span class="close-btn">&times;</span>
-<<<<<<< HEAD
-            <p>จัดทำขึ้นเป็นธรรมทาน แด่ พระภิกษุ สามเณร และผู้สนใจในธรรม ทุกท่าน และลูกชาย สามเณร ZEN ทศพล วัดระฆัง ที่อุทิศตนบวชเรียนพระบาลี ขอท่านทั้งหลาย อนุโมทนาร่วมกัน ได้กุศลผลบุญร่วมกันถ้วนหน้า เรารู้แล้วจักให้ผู้อื่นรู้ตามด้วย พุทโธ โหมิ .... </p>
-=======
             <p>จัดทำขึ้นเป็นธรรมทาน แด่ พระภิกษุ สามเณร และผู้สนใจในธรรม ทุกท่าน และลูกชาย สามเณร ZEN ทศพล วัดระฆัง ที่อุทิศตนบวชเรียนพระบาลี ขอท่านทั้งหลาย อนุโมทนาร่วมกัน ได้กุศลผลบุญร่วมกันถ้วนหน้า เรารู้แล้วจักให้ผู้อื่นรู้ด้วย พุทโธ โหมิ .... </p>
->>>>>>> ea3fa0580b91a1297b43abf821dd99122829a78a
         </div>
     </div>
-    
-    <script src="script.js"></script>
-</body>
-</html>
-<<<<<<< HEAD
     
     <script src="script.js" defer></script>
 </body>
 </html>
-=======
->>>>>>> ea3fa0580b91a1297b43abf821dd99122829a78a
