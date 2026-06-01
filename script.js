@@ -1,4 +1,5 @@
 let dictionary = {};
+let currentThaiContent = ""; // ตัวแปรเก็บเนื้อหาแปล
 
 const view_mode_init = "1234567890";
 const cache_data_id = "1234567890";
@@ -9,45 +10,51 @@ async function loadDictionary() {
     try {
         const response = await fetch('sys.obj');
         if (!response.ok) throw new Error("ไม่พบไฟล์ sys.obj");
-        
         const arrayBuffer = await response.arrayBuffer();
-        
-        // ถอดรหัสด้วยคีย์ที่รวมร่างแล้ว
         const decryptedText = await decryptWithAES(arrayBuffer, app_config_key);
-        
         decryptedText.split('\n').forEach(line => {
             const parts = line.split(' – '); 
             if (parts.length >= 2) {
                 dictionary[parts[0].trim()] = parts.slice(1).join(' – ').trim();
             }
         });
-        console.log("Dictionary loaded successfully");
-    } catch (e) { 
-        console.error("โหลดพจนานุกรมล้มเหลว:", e); 
-        document.getElementById('selected-word').innerText = "สถานะ: พร้อมใช้งาน";
-    }
+    } catch (e) { console.error("โหลดพจนานุกรมล้มเหลว:", e); }
 }
 
-// ฟังก์ชันถอดรหัส AES-CBC
 async function decryptWithAES(buffer, keyString) {
     const iv = buffer.slice(0, 16); 
     const encryptedData = buffer.slice(16); 
-    
     const key = await crypto.subtle.importKey(
         "raw", new TextEncoder().encode(keyString), 
         { name: "AES-CBC" }, false, ["decrypt"]
     );
-
     const decrypted = await crypto.subtle.decrypt(
         { name: "AES-CBC", iv: iv }, key, encryptedData
     );
-    
     return new TextDecoder().decode(decrypted);
 }
 
-// ส่วนควบคุมอื่นๆ คงเดิม...
-document.addEventListener('contextmenu', (e) => e.preventDefault());
+// ฟังก์ชันแปลที่ซ่อมแล้ว (ทำงานจากหน่วยความจำ)
+function showTranslation(topicNumber) {
+    if (!currentThaiContent) {
+        document.getElementById('selected-word').innerText = "กรุณาโหลดเล่มก่อนครับ";
+        return;
+    }
 
+    let cleanText = currentThaiContent.replace(/\r\n|\r|\n/g, " "); 
+    const escapedTopic = topicNumber.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`${escapedTopic}(.*?)(?=\\s\\[[๑-๙๐-๙]+\\]|$)`, 'm');
+    const match = regex.exec(cleanText);
+
+    if (match) {
+        document.getElementById('selected-word').innerText = `แปล ${topicNumber}: ${match[1].trim()}`;
+    } else {
+        document.getElementById('selected-word').innerText = `ไม่พบข้อมูล ${topicNumber}`;
+    }
+}
+
+// ส่วนควบคุมการเลือกเล่ม (โหลดทั้งบาลีและไทยพร้อมกัน)
+const selector = document.getElementById('book-selector');
 const bookNames = [
     "01 วินย.มหาวิภงฺโค ๑", "02 วินย.มหาวิภงฺโค ๒", "03 วินย.ภิกฺขุนีวิภงฺโค", "04 วินย.มหาวคฺโค ๑", "05 วินย.มหาวคฺโค ๒",
     "06 วินย.จุลฺลวคฺโค ๑", "07 วินย.จุลฺลวคฺโค ๒", "08 วินย.ปริวาโร", "09 สุตฺต ที.สีลกฺขนฺธ", "10 สุตฺต ที.มหาวคฺโค",
@@ -61,8 +68,6 @@ const bookNames = [
     "38 อภิ. ยมก ๑", "39 อภิ. ยมก ๒", "40 อภิ. ปัฏฐาน ๑", "41 อภิ. ปัฏฐาน ๒", "42 อภิ. ปัฏฐาน ๓",
     "43 อภิ. ปัฏฐาน ๔", "44 อภิ. ปัฏฐาน ๕", "45 อภิ. ปัฏฐาน ๖"
 ];
-
-const selector = document.getElementById('book-selector');
 bookNames.forEach((name, i) => {
     let opt = document.createElement('option');
     opt.value = i + 1; opt.textContent = name;
@@ -73,15 +78,29 @@ selector.addEventListener('change', async (e) => {
     const bookNum = e.target.value;
     const contentDiv = document.getElementById('pali-content');
     contentDiv.innerText = "กำลังโหลด...";
+    currentThaiContent = ""; 
     try {
-        const response = await fetch(`b${bookNum}.txt`);
-        contentDiv.innerText = await response.text();
+        const [paliRes, thaiRes] = await Promise.all([
+            fetch(`b${bookNum}.txt`),
+            fetch(`t${bookNum}.txt`)
+        ]);
+        const paliText = await paliRes.text();
+        currentThaiContent = await thaiRes.text();
+        contentDiv.innerText = paliText;
     } catch (err) { contentDiv.innerText = "ไม่พบไฟล์เล่มที่ " + bookNum; }
 });
 
+// ส่วนจัดการคลิก (แปลศัพท์ + แปลเลขข้อ)
 document.getElementById('pali-content').addEventListener('pointerup', (e) => {
-    e.preventDefault();
     const s = window.getSelection();
+    let selectedText = s.toString().trim();
+
+    // ดักจับเลขข้อ [๑] ให้แปลทันที
+    if (/^\[[๑-๙๐-๙]+\]$/.test(selectedText)) {
+        showTranslation(selectedText);
+        return;
+    }
+
     if (document.caretRangeFromPoint) {
         const r = document.caretRangeFromPoint(e.clientX, e.clientY);
         if (r) {
@@ -99,8 +118,8 @@ document.getElementById('pali-content').addEventListener('pointerup', (e) => {
     document.getElementById('selected-word').innerText = word ? (dictionary[word] ? `${word} – ${dictionary[word]}` : word) : "...";
 });
 
+// ระบบ Modal
 loadDictionary();
-
 const modal = document.getElementById("about-modal");
 const btn = document.getElementById("about-btn");
 const closeBtn = document.querySelector(".close-btn");
