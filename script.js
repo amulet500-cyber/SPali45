@@ -39,16 +39,29 @@ async function decryptWithAES(buffer, keyString) {
     return new TextDecoder().decode(decrypted);
 }
 
+// ปรับปรุงฟังก์ชันให้สั่งยุบ-ขยายป๊อปอัป
+function updatePopup(text) {
+    const popup = document.getElementById('popup');
+    const wordDisplay = document.getElementById('selected-word');
+    
+    if (!text || text.trim() === "") {
+        popup.classList.remove('active');
+    } else {
+        wordDisplay.innerText = text;
+        popup.classList.add('active');
+    }
+}
+
 function showTranslation(topicNumber) {
     if (!currentThaiContent) {
-        document.getElementById('selected-word').innerText = "กรุณาโหลดเล่มก่อนครับ";
+        updatePopup("กรุณาโหลดเล่มก่อนครับ");
         return;
     }
     let cleanText = currentThaiContent.replace(/\r\n|\r|\n/g, " ");
     const escapedTopic = topicNumber.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const regex = new RegExp(`${escapedTopic}(.*?)(?=\\s\\[[๑-๙๐-๙]+\\]|$)`, 'm');
     const match = regex.exec(cleanText);
-    document.getElementById('selected-word').innerText = match ? `แปล ${topicNumber}: ${match[1].trim()}` : `ไม่พบข้อมูล ${topicNumber}`;
+    updatePopup(match ? `แปล ${topicNumber}: ${match[1].trim()}` : `ไม่พบข้อมูล ${topicNumber}`);
 }
 
 const selector = document.getElementById('book-selector');
@@ -76,14 +89,12 @@ selector.addEventListener('change', async (e) => {
     const contentDiv = document.getElementById('pali-content');
     contentDiv.innerText = "กำลังโหลด...";
     currentThaiContent = "";
+    updatePopup(""); // ยุบป๊อปอัปเมื่อเปลี่ยนเล่ม
     try {
         const [paliRes, thaiRes] = await Promise.all([fetch(`b${bookNum}.txt`), fetch(`t${bookNum}.txt`)]);
         let paliText = await paliRes.text();
-        
-        // ระบายสีเลขหัวข้อและทำให้คลิกทะลุได้
         paliText = paliText.replace(/^(\[[๑-๙๐-๙]+\])/gm, '<span class="pali-number" style="pointer-events: none;">$1</span>');
         contentDiv.innerHTML = paliText;
-        
         currentThaiContent = await thaiRes.text();
     } catch (err) { contentDiv.innerText = "ไม่พบไฟล์เล่มที่ " + bookNum; }
 });
@@ -106,7 +117,7 @@ document.getElementById('pali-content').addEventListener('click', (e) => {
             while (end < t.length && t[end] !== ' ' && t[end] !== '\n') end++;
             
             const word = t.substring(start, end).trim();
-            if (!word) return;
+            if (!word) { updatePopup(""); return; } // ยุบถ้าคลิกที่ว่าง
 
             const span = document.createElement('span');
             span.className = 'highlight-pali';
@@ -121,7 +132,7 @@ document.getElementById('pali-content').addEventListener('click', (e) => {
             if (/^\[[๑-๙๐-๙]+\]$/.test(word)) {
                 showTranslation(word);
             } else {
-                document.getElementById('selected-word').innerText = dictionary[word] ? `${word} – ${dictionary[word]}` : word;
+                updatePopup(dictionary[word] ? `${word} – ${dictionary[word]}` : word);
             }
         }
     }
