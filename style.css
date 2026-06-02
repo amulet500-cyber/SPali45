@@ -140,16 +140,15 @@ h1 {
     }
 }
 
-/* --- แก้ไขเฉพาะสำหรับหน้าจอแท็บเล็ต/Redmi Pad --- */
-@media screen and (min-width: 601px) and (max-width: 1200px) {
-    /* ปรับขนาดเนื้อหาบาลีบน Redmi Pad */
+/* --- อัปเดตปรับแก้การแสดงผลบน Tablet (Redmi Pad) ให้แสดงผลเล็กลง --- */
+@media screen and (min-width: 600px) and (max-width: 1300px) {
     #pali-content {
         font-size: 14px !important;
-        line-height: 1.6 !important;
+        line-height: 1.5 !important;
         padding: 15px !important;
     }
     
-    /* ปรับขนาดหัวข้อ */
+    /* ปรับแต่งส่วนหัวข้อให้เล็กลงตาม */
     h1 {
         font-size: 18px !important;
     }
