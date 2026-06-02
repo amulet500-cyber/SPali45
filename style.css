@@ -140,22 +140,11 @@ h1 {
     }
 }
 
-/* --- อัปเดตปรับแก้การแสดงผลบน Tablet (Redmi Pad) ให้แสดงผลเล็กลง --- */
-@media screen and (min-width: 600px) and (max-width: 1300px) {
+/* --- แก้ไขเฉพาะ Redmi Pad (ช่วงความละเอียด 600px - 1024px) --- */
+@media screen and (min-width: 600px) and (max-width: 1024px) {
     #pali-content {
-        font-size: 14px !important;
-        line-height: 1.5 !important;
-        padding: 15px !important;
-    }
-    
-    /* ปรับแต่งส่วนหัวข้อให้เล็กลงตาม */
-    h1 {
-        font-size: 18px !important;
-    }
-
-    /* ปรับขนาดช่องเลือกเล่ม */
-    #book-selector {
-        font-size: 14px !important;
-        padding: 8px 12px !important;
+        font-size: 20px !important;  /* ปรับให้ใหญ่ขึ้นตามต้องการ */
+        line-height: 1.6 !important; /* ปรับระยะห่างให้สมดุล ไม่ห่างเกินไป */
+        padding: 20px !important;
     }
 }
