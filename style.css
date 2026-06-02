@@ -65,7 +65,7 @@ h1 {
     font-size: 16px;
 }
 
-/* --- ป๊อปอัปด้านล่าง --- */
+/* --- ป๊อปอัปด้านล่าง (ปรับให้ยุบ-ขยายอัตโนมัติ) --- */
 #popup {
     position: fixed;
     bottom: 0;
@@ -75,21 +75,29 @@ h1 {
     background: rgba(78, 52, 46, 0.95);
     border-top: 4px solid #d4a373;
     color: white;
-    padding: 20px;
+    padding: 0; /* เริ่มต้นที่ 0 เพื่อให้ยุบได้ */
     text-align: center;
     border-top-left-radius: 15px;
     border-top-right-radius: 15px;
     box-shadow: 0 -4px 15px rgba(0,0,0,0.4);
     z-index: 1000;
+    transition: all 0.3s ease;
     pointer-events: none;
+    max-height: 40vh;
+    overflow: hidden;
+}
+
+#popup.active {
+    padding: 20px !important;
+    pointer-events: auto;
 }
 
 #selected-word {
     display: block;
-    font-size: 18px;
+    font-size: 26px; /* ขนาดใหญ่ขึ้น 60% ตามต้องการ */
     line-height: 1.5;
     word-wrap: break-word;
-    max-height: 150px;
+    max-height: 30vh;
     overflow-y: auto;
     pointer-events: auto;
 }
@@ -140,21 +148,14 @@ h1 {
     }
 }
 
-/* --- แก้ไขเฉพาะ Redmi Pad (ปรับลดขนาดลง 30% จาก 22px เหลือประมาณ 15px-16px) --- */
+/* --- แก้ไขเฉพาะ Redmi Pad --- */
 @media screen and (min-width: 600px) and (max-width: 1024px) {
     #pali-content {
-        font-size: 12px !important;    /* ปรับลดลง 30% */
-        line-height: 1.2 !important;   /* ปรับระยะห่างให้สัมพันธ์กัน */
+        font-size: 12px !important; 
+        line-height: 1.2 !important; 
         padding: 14px !important;
     }
+    #selected-word {
+        font-size: 22px !important; /* ปรับให้ใหญ่แต่ไม่ล้นจอแท็บเล็ต */
+    }
 }
-
-/* --- ปรับขยายขนาดคำแปลใน Popup ขึ้น 60% --- */
-#popup {
-    /* เพิ่มความสูงของป๊อปอัปให้รับกับข้อความที่ขยายขึ้น */
-    min-height: 250px; 
-    padding: 30px !important;
-}
-
-
-
