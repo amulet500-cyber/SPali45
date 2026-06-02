@@ -143,7 +143,7 @@ h1 {
 /* --- แก้ไขเฉพาะ Redmi Pad (ปรับลดขนาดลง 30% จาก 22px เหลือประมาณ 15px-16px) --- */
 @media screen and (min-width: 600px) and (max-width: 1024px) {
     #pali-content {
-        font-size: 15px !important;    /* ปรับลดลง 30% */
+        font-size: 12px !important;    /* ปรับลดลง 30% */
         line-height: 1.2 !important;   /* ปรับระยะห่างให้สัมพันธ์กัน */
         padding: 18px !important;
     }
