@@ -149,3 +149,25 @@ h1 {
         letter-spacing: 0.2em !important; /* เพิ่มระยะห่างระหว่างตัวอักษร 20% ของขนาดฟอนต์ */
     }
 }
+
+/* --- ปรับขยายขนาดคำแปลใน Popup ขึ้น 60% --- */
+#popup {
+    /* เพิ่มความสูงของป๊อปอัปให้รับกับข้อความที่ขยายขึ้น */
+    min-height: 250px; 
+    padding: 30px !important;
+}
+
+#selected-word {
+    /* ขยายขนาดฟอนต์จากเดิม 18px เป็นประมาณ 28px-29px (เพิ่มขึ้น 60%) */
+    font-size: 28px !important;
+    line-height: 1.5 !important;
+    max-height: 300px !important; /* ขยายพื้นที่เลื่อนดูข้อความให้มากขึ้น */
+}
+
+/* --- สำหรับแท็บเล็ต (Redmi Pad) ให้คงความเหมาะสมไว้ --- */
+@media screen and (min-width: 600px) and (max-width: 1024px) {
+    #selected-word {
+        font-size: 24px !important; /* ปรับให้พอดีหน้าจอแท็บเล็ต ไม่ให้ใหญ่ล้นเกินไป */
+    }
+}
+
