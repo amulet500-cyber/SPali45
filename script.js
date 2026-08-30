@@ -132,7 +132,36 @@ document.getElementById('pali-content').addEventListener('click', (e) => {
             if (/^\[[๑-๙๐-๙]+\]$/.test(word)) {
                 showTranslation(word);
             } else {
-                updatePopup(dictionary[word] ? `${word} – ${dictionary[word]}` : word);
+                // 1. ค้นหาในพจนานุกรม Local (sys.obj) ก่อน
+                if (dictionary[word]) {
+                    updatePopup(`${word} – ${dictionary[word]}`);
+                } else {
+                    // 2. ถ้าไม่พบ ให้ส่งคำไปแปลที่ AI ผ่านเซิร์ฟเวอร์ Render
+                    updatePopup(`${word} – (กำลังให้ AI ช่วยแปล...)`);
+                    
+                    fetch('/api/translate-word', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ word: word })
+                    })
+                    .then(response => {
+                        if (!response.ok) throw new Error("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้");
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (data && data.translation) {
+                            updatePopup(data.translation);
+                        } else {
+                            updatePopup(`${word} – ไม่พบคำแปล`);
+                        }
+                    })
+                    .catch(err => {
+                        console.error("AI Translation Error:", err);
+                        updatePopup(`${word} – ไม่พบคำแปลในระบบ`);
+                    });
+                }
             }
         }
     }
