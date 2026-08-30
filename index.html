@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>พระไตรปิฎกบาลีสยามรัฐ ฉบับบาลีศึกษา</title>
     
     <link rel="stylesheet" href="style.css">
@@ -13,8 +13,8 @@
     <meta name="apple-mobile-web-app-title" content="คลังพระไตรปิฎก">
 </head>
 <body>
-    <div class="app-wrapper">
-        <!-- โซนส่วนหัว ตรึงอยู่ด้านบน -->
+    <div class="app-container">
+        <!-- ส่วนหัว -->
         <header class="app-header">
             <h1>พระไตรปิฎกบาลีสยามรัฐ ฉบับบาลีศึกษา แปลคำบาลีไทย</h1>
             
@@ -25,7 +25,7 @@
             </div>
         </header>
 
-        <!-- โซนเนื้อหาบาลี (เลื่อนสกอร์ลได้เฉพาะโซนนี้) -->
+        <!-- เนื้อหาหลัก -->
         <main class="main-content">
             <div id="pali-content">โปรดเลือกเล่มจากรายการด้านบน เพื่อเริ่มอ่านพระไตรปิฎก</div>
             
@@ -36,14 +36,12 @@
                 <button id="about-btn">เกี่ยวกับผู้เขียน</button>
             </div>
         </main>
-
-        <!-- โซนป๊อปอัปคำแปล ตรึงติดขอบล่างจอเสมอ -->
-        <div id="popup">
-            <span id="selected-word">...</span>
-        </div>
     </div>
 
-    <!-- โซน Modal สำหรับข้อมูลผู้เขียน -->
+    <!-- ป๊อปอัปคำแปล -->
+    <div id="popup"></div>
+
+    <!-- Modal ข้อมูลผู้เขียน -->
     <div id="about-modal" class="modal">
         <div class="modal-content">
             <span class="close-btn">&times;</span>
