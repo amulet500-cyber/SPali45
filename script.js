@@ -5,27 +5,41 @@
 
 let dictionary = {};
 let currentThaiContent = "";
+let lastRequestedWord = ""; // ป้องกัน Race Condition เมื่อคลิกคำถี่ๆ
 
 const view_mode_init = "1234567890";
 const cache_data_id = "1234567890";
 const theme_color_code = "123456789012";
 const app_config_key = view_mode_init + cache_data_id + theme_color_code;
 
+// URL สำหรับเรียกใช้งาน AI บน Render
+const AI_TRANSLATE_URL = "https://podhi-vision-line-bot-1.onrender.com/api/translate-word";
+
+// โหลดพจนานุกรมจาก sys.obj และรวมข้อมูลจาก LocalStorage
 async function loadDictionary() {
     try {
         const response = await fetch('sys.obj');
         if (!response.ok) throw new Error("ไม่พบไฟล์ sys.obj");
         const arrayBuffer = await response.arrayBuffer();
         const decryptedText = await decryptWithAES(arrayBuffer, app_config_key);
+        
         decryptedText.split('\n').forEach(line => {
             const parts = line.split(' – ');
             if (parts.length >= 2) {
                 dictionary[parts[0].trim()] = parts.slice(1).join(' – ').trim();
             }
         });
+
+        // โหลดคำที่ AIเคยแปลไว้แล้วจาก LocalStorage มาเสริม
+        const localSaved = localStorage.getItem('ai_added_words');
+        if (localSaved) {
+            const extraDict = JSON.parse(localSaved);
+            Object.assign(dictionary, extraDict);
+        }
     } catch (e) { console.error("โหลดพจนานุกรมล้มเหลว:", e); }
 }
 
+// 1. ฟังก์ชันถอดรหัส (Decrypt)
 async function decryptWithAES(buffer, keyString) {
     const iv = buffer.slice(0, 16);
     const encryptedData = buffer.slice(16);
@@ -39,11 +53,49 @@ async function decryptWithAES(buffer, keyString) {
     return new TextDecoder().decode(decrypted);
 }
 
-// ปรับปรุงฟังก์ชันให้สั่งยุบ-ขยายป๊อปอัป
+// 2. ฟังก์ชันเข้ารหัสกลับ (Encrypt) สำหรับสร้างไฟล์ sys.obj
+async function encryptWithAES(text, keyString) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(text);
+    const iv = crypto.getRandomValues(new Uint8Array(16)); // สุ่ม IV 16 ไบต์
+    const key = await crypto.subtle.importKey(
+        "raw", encoder.encode(keyString),
+        { name: "AES-CBC" }, false, ["encrypt"]
+    );
+    const encrypted = await crypto.subtle.encrypt(
+        { name: "AES-CBC", iv: iv }, key, data
+    );
+    
+    // รวม IV 16 ไบต์ไว้ข้างหน้าข้อมูลที่เข้ารหัส
+    const combined = new Uint8Array(iv.length + encrypted.byteLength);
+    combined.set(iv, 0);
+    combined.set(new Uint8Array(encrypted), iv.length);
+    return combined.buffer;
+}
+
+// ฟังก์ชันช่วยดาวน์โหลดไฟล์ sys.obj ฉบับอัปเดตคำแปลใหม่
+async function exportNewSysObj() {
+    let textLines = [];
+    for (const [word, trans] of Object.entries(dictionary)) {
+        textLines.push(`${word} – ${trans}`);
+    }
+    const fullText = textLines.join('\n');
+    const encryptedBuffer = await encryptWithAES(fullText, app_config_key);
+    
+    const blob = new Blob([encryptedBuffer], { type: "application/octet-stream" });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'sys.obj';
+    link.click();
+}
+
+// ปรับปรุงฟังก์ชันสั่งยุบ-ขยายป๊อปอัป
 function updatePopup(text) {
     const popup = document.getElementById('popup');
     const wordDisplay = document.getElementById('selected-word');
     
+    if (!popup || !wordDisplay) return;
+
     if (!text || text.trim() === "") {
         popup.classList.remove('active');
     } else {
@@ -78,50 +130,75 @@ const bookNames = [
     "38 อภิ. ยมก ๑", "39 อภิ. ยมก ๒", "40 อภิ. ปัฏฐาน ๑", "41 อภิ. ปัฏฐาน ๒", "42 อภิ. ปัฏฐาน ๓",
     "43 อภิ. ปัฏฐาน ๔", "44 อภิ. ปัฏฐาน ๕", "45 อภิ. ปัฏฐาน ๖"
 ];
-bookNames.forEach((name, i) => {
-    let opt = document.createElement('option');
-    opt.value = i + 1; opt.textContent = name;
-    selector.appendChild(opt);
-});
 
-selector.addEventListener('change', async (e) => {
-    const bookNum = e.target.value;
-    const contentDiv = document.getElementById('pali-content');
-    contentDiv.innerText = "กำลังโหลด...";
-    currentThaiContent = "";
-    updatePopup(""); // ยุบป๊อปอัปเมื่อเปลี่ยนเล่ม
-    try {
-        const [paliRes, thaiRes] = await Promise.all([fetch(`b${bookNum}.txt`), fetch(`t${bookNum}.txt`)]);
-        let paliText = await paliRes.text();
-        paliText = paliText.replace(/^(\[[๑-๙๐-๙]+\])/gm, '<span class="pali-number" style="pointer-events: none;">$1</span>');
-        contentDiv.innerHTML = paliText;
-        currentThaiContent = await thaiRes.text();
-    } catch (err) { contentDiv.innerText = "ไม่พบไฟล์เล่มที่ " + bookNum; }
-});
-
-document.getElementById('pali-content').addEventListener('click', (e) => {
-    const currentHighlights = document.querySelectorAll('.highlight-pali');
-    currentHighlights.forEach(el => {
-        const parent = el.parentNode;
-        parent.replaceChild(document.createTextNode(el.textContent), el);
-        parent.normalize();
+if (selector) {
+    bookNames.forEach((name, i) => {
+        let opt = document.createElement('option');
+        opt.value = i + 1; 
+        opt.textContent = name;
+        selector.appendChild(opt);
     });
 
+    selector.addEventListener('change', async (e) => {
+        const bookNum = e.target.value;
+        const contentDiv = document.getElementById('pali-content');
+        if (!contentDiv) return;
+
+        contentDiv.innerText = "กำลังโหลด...";
+        currentThaiContent = "";
+        updatePopup(""); // ยุบป๊อปอัปเมื่อเปลี่ยนเล่ม
+        try {
+            const [paliRes, thaiRes] = await Promise.all([fetch(`b${bookNum}.txt`), fetch(`t${bookNum}.txt`)]);
+            let paliText = await paliRes.text();
+            paliText = paliText.replace(/^(\[[๑-๙๐-๙]+\])/gm, '<span class="pali-number" style="pointer-events: none;">$1</span>');
+            contentDiv.innerHTML = paliText;
+            currentThaiContent = await thaiRes.text();
+        } catch (err) { contentDiv.innerText = "ไม่พบไฟล์เล่มที่ " + bookNum; }
+    });
+}
+
+function getRangeFromPoint(x, y) {
     if (document.caretRangeFromPoint) {
-        const r = document.caretRangeFromPoint(e.clientX, e.clientY);
+        return document.caretRangeFromPoint(x, y);
+    } else if (document.caretPositionFromPoint) {
+        const pos = document.caretPositionFromPoint(x, y);
+        if (pos) {
+            const range = document.createRange();
+            range.setStart(pos.offsetNode, pos.offset);
+            range.collapse(true);
+            return range;
+        }
+    }
+    return null;
+}
+
+const paliContentDiv = document.getElementById('pali-content');
+if (paliContentDiv) {
+    paliContentDiv.addEventListener('click', (e) => {
+        const currentHighlights = document.querySelectorAll('.highlight-pali');
+        currentHighlights.forEach(el => {
+            const parent = el.parentNode;
+            if (parent) {
+                parent.replaceChild(document.createTextNode(el.textContent), el);
+                parent.normalize();
+            }
+        });
+
+        const r = getRangeFromPoint(e.clientX, e.clientY);
         if (r) {
             let n = r.startContainer, o = r.startOffset, t = n.textContent;
-            if (!t) return;
+            if (!t || n.nodeType !== Node.TEXT_NODE) return;
+
             let start = o, end = o;
-            while (start > 0 && t[start - 1] !== ' ' && t[start - 1] !== '\n') start--;
-            while (end < t.length && t[end] !== ' ' && t[end] !== '\n') end++;
+            while (start > 0 && t[start - 1] !== ' ' && t[start - 1] !== '\n' && t[start - 1] !== '\t') start--;
+            while (end < t.length && t[end] !== ' ' && t[end] !== '\n' && t[end] !== '\t') end++;
             
-            const word = t.substring(start, end).trim();
-            if (!word) { updatePopup(""); return; } // ยุบถ้าคลิกที่ว่าง
+            let rawWord = t.substring(start, end).trim();
+            if (!rawWord) { updatePopup(""); return; }
 
             const span = document.createElement('span');
             span.className = 'highlight-pali';
-            span.textContent = word;
+            span.textContent = rawWord;
 
             const range = document.createRange();
             range.setStart(n, start);
@@ -129,48 +206,79 @@ document.getElementById('pali-content').addEventListener('click', (e) => {
             range.deleteContents();
             range.insertNode(span);
 
-            if (/^\[[๑-๙๐-๙]+\]$/.test(word)) {
-                showTranslation(word);
-            } else {
-                // 1. ค้นหาในพจนานุกรม Local (sys.obj) ก่อน
-                if (dictionary[word]) {
-                    updatePopup(`${word} – ${dictionary[word]}`);
-                } else {
-                    // 2. ถ้าไม่พบ ให้ส่งคำไปแปลที่ AI ผ่านเซิร์ฟเวอร์ Render
-                    updatePopup(`${word} – (กำลังให้ AI ช่วยแปล...)`);
-                    
-                    fetch('/api/translate-word', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ word: word })
-                    })
-                    .then(response => {
-                        if (!response.ok) throw new Error("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้");
-                        return response.json();
-                    })
-                    .then(data => {
-                        if (data && data.translation) {
-                            updatePopup(data.translation);
-                        } else {
-                            updatePopup(`${word} – ไม่พบคำแปล`);
-                        }
-                    })
-                    .catch(err => {
-                        console.error("AI Translation Error:", err);
-                        updatePopup(`${word} – ไม่พบคำแปลในระบบ`);
-                    });
-                }
+            if (/^\[[๑-๙๐-๙]+\]$/.test(rawWord)) {
+                showTranslation(rawWord);
+                return;
             }
+
+            const cleanWord = rawWord.replace(/[.,;:\s"”’]/g, "").trim();
+            lastRequestedWord = cleanWord;
+
+            if (dictionary[cleanWord]) {
+                updatePopup(`${cleanWord} – ${dictionary[cleanWord]}`);
+                return;
+            } else if (dictionary[rawWord]) {
+                updatePopup(`${rawWord} – ${dictionary[rawWord]}`);
+                return;
+            }
+
+            let baseWord = cleanWord;
+            if (cleanWord.endsWith('ติ')) {
+                baseWord = cleanWord.slice(0, -2);
+            } else if (cleanWord.endsWith('นฺติ')) {
+                baseWord = cleanWord.slice(0, -4);
+            }
+
+            if (baseWord !== cleanWord && dictionary[baseWord]) {
+                updatePopup(`${cleanWord} [${baseWord} + อิติ] – ${dictionary[baseWord]}`);
+                return;
+            }
+
+            updatePopup(`${cleanWord} – (กำลังให้ AI ช่วยแปล...)`);
+            
+            fetch(AI_TRANSLATE_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ word: cleanWord })
+            })
+            .then(response => {
+                if (!response.ok) throw new Error("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้");
+                return response.json();
+            })
+            .then(data => {
+                if (lastRequestedWord === cleanWord) {
+                    if (data && data.translation) {
+                        const cleanTranslation = data.translation.replace(/^.*?\s–\s/, '').trim();
+                        
+                        // 1. อัปเดตใส่ dictionary ในหน่วยความจำทันที
+                        dictionary[cleanWord] = cleanTranslation;
+
+                        // 2. เซฟเก็บลง LocalStorage
+                        let localSaved = JSON.parse(localStorage.getItem('ai_added_words') || '{}');
+                        localSaved[cleanWord] = cleanTranslation;
+                        localStorage.setItem('ai_added_words', JSON.stringify(localSaved));
+
+                        updatePopup(`${cleanWord} – ${cleanTranslation}`);
+                    } else {
+                        updatePopup(`${cleanWord} – ไม่พบคำแปล`);
+                    }
+                }
+            })
+            .catch(err => {
+                console.error("AI Translation Error:", err);
+                if (lastRequestedWord === cleanWord) {
+                    updatePopup(`${cleanWord} – ไม่พบคำแปลในระบบ`);
+                }
+            });
         }
-    }
-});
+    });
+}
 
 loadDictionary();
 const modal = document.getElementById("about-modal");
 const btn = document.getElementById("about-btn");
 const closeBtn = document.querySelector(".close-btn");
-if(btn) btn.onclick = () => { modal.style.display = "block"; }
-if(closeBtn) closeBtn.onclick = () => { modal.style.display = "none"; }
+
+if (btn) btn.onclick = () => { modal.style.display = "block"; }
+if (closeBtn) closeBtn.onclick = () => { modal.style.display = "none"; }
 window.onclick = (event) => { if (event.target == modal) modal.style.display = "none"; }
