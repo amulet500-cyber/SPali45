@@ -7,7 +7,6 @@ const AI_TRANSLATE_URL = "https://podhi-vision-line-bot-1.onrender.com/api/trans
 // โหลดพจนานุกรม (ดึงไฟล์ล่าสุดเสมอโดยไม่ติด Cache)
 async function loadDictionary() {
     try {
-        // ใส่ timestamp (?t=...) เพื่อป้องกันเบราว์เซอร์จำ Cache เก่าของ mdic.txt
         const cacheBuster = `?t=${Date.now()}`;
         let response = await fetch(`mdic.txt${cacheBuster}`, { cache: 'no-store' });
         
@@ -25,18 +24,22 @@ async function loadDictionary() {
             }
         });
 
-        // ดึงคำแปลเพิ่มเติมที่เคยบันทึกไว้ชั่วคราวใน LocalStorage มาทับซ้อน
+        // ดึงคำแปลเพิ่มเติมที่เคยบันทึกไว้ใน LocalStorage มาทับซ้อน
         const localSaved = localStorage.getItem('ai_added_words');
         if (localSaved) {
-            const extraDict = JSON.parse(localSaved);
-            Object.assign(dictionary, extraDict);
+            try {
+                const extraDict = JSON.parse(localSaved);
+                Object.assign(dictionary, extraDict);
+            } catch (jsonErr) {
+                console.error("Error parsing ai_added_words from localStorage:", jsonErr);
+            }
         }
     } catch (e) { 
         console.error("โหลดพจนานุกรมล้มเหลว:", e); 
     }
 }
 
-// ส่งออกพจนานุกรมเป็นไฟล์ข้อความธรรมดา (Plain Text)
+// ส่งออกพจนานุกรมเป็นไฟล์ข้อความ Plain Text
 async function exportNewSysObj() {
     let textLines = [];
     for (const [word, trans] of Object.entries(dictionary)) {
@@ -78,8 +81,8 @@ function updatePopup(text, targetElement = null, isBottomMode = false) {
 
     if (targetElement) {
         const rect = targetElement.getBoundingClientRect();
-        const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
-        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        const scrollLeft = window.scrollX || window.pageXOffset || document.documentElement.scrollLeft;
+        const scrollTop = window.scrollY || window.pageYOffset || document.documentElement.scrollTop;
 
         let topPos = rect.top + scrollTop - 8;
         if (rect.top < 60) {
@@ -115,10 +118,10 @@ function showTranslation(topicNumber, targetElement) {
     }
     let cleanText = currentThaiContent.replace(/\r\n|\r|\n/g, " ");
     const escapedTopic = topicNumber.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`${escapedTopic}(.*?)(?=\\s\\[[๑-๙๐-๙]+\\]|$)`, 'm');
+    const regex = new RegExp(`${escapedTopic}\\s*(.*?)(?=\\s*\\[[๑-๙๐-๙]+\\]|$)`, 'm');
     const match = regex.exec(cleanText);
     
-    updatePopup(match ? `แปล ${topicNumber}: ${match[1].trim()}` : `ไม่พบข้อมูล ${topicNumber}`, targetElement, true);
+    updatePopup(match && match[1].trim() ? `แปล ${topicNumber}: ${match[1].trim()}` : `ไม่พบข้อมูล ${topicNumber}`, targetElement, true);
 }
 
 const selector = document.getElementById('book-selector');
@@ -177,6 +180,38 @@ function getRangeFromPoint(x, y) {
     return null;
 }
 
+// ตรวจสอบการตัดคำสนธิบาลีเบื้องต้น
+function checkPaliSandhi(word) {
+    if (dictionary[word]) return { found: true, word: word, note: "" };
+
+    if (word.endsWith('ติติ')) {
+        let base = word.slice(0, -4) + 'ติ';
+        if (dictionary[base]) return { found: true, word: base, note: `${word} [${base} + อิติ]` };
+    }
+    if (word.endsWith('นฺติติ')) {
+        let base = word.slice(0, -6) + 'นฺติ';
+        if (dictionary[base]) return { found: true, word: base, note: `${word} [${base} + อิติ]` };
+    }
+    if (word.endsWith('นฺติ')) {
+        let base = word.slice(0, -4);
+        if (dictionary[base]) return { found: true, word: base, note: `${word} [${base} + อิติ]` };
+    }
+    if (word.endsWith('ติ')) {
+        let base = word.slice(0, -2);
+        if (dictionary[base]) return { found: true, word: base, note: `${word} [${base} + อิติ]` };
+    }
+    if (word.endsWith('าติ')) {
+        let base = word.slice(0, -2);
+        if (dictionary[base]) return { found: true, word: base, note: `${word} [${base} + อิติ]` };
+    }
+    if (word.endsWith('มฺปิ')) {
+        let base = word.slice(0, -3) + 'ํ';
+        if (dictionary[base]) return { found: true, word: base, note: `${word} [${base} + อปิ]` };
+    }
+
+    return { found: false, word: word, note: "" };
+}
+
 const paliContentDiv = document.getElementById('pali-content');
 if (paliContentDiv) {
     paliContentDiv.addEventListener('click', (e) => {
@@ -211,34 +246,32 @@ if (paliContentDiv) {
             range.deleteContents();
             range.insertNode(span);
 
-            if (/^\[[๑-๙๐-๙]+\]$/.test(rawWord)) {
-                showTranslation(rawWord, span);
+            // ตรวจสอบว่าเป็นข้อความแปลตามหมวด [๑] หรือไม่
+            const bracketMatch = rawWord.match(/\[[๑-๙๐-๙]+\]/);
+            if (bracketMatch) {
+                showTranslation(bracketMatch[0], span);
                 return;
             }
 
-            const cleanWord = rawWord.replace(/[.,;:\s"”’]/g, "").trim();
+            // ทำความสะอาดคำศัพท์ ตัดเครื่องหมายอักขระพิเศษรอบนอกออก
+            const cleanWord = rawWord.replace(/^[.,;:!?"”’‘'()«»\[\]\s]+|[.,;:!?"”’‘'()«»\[\]\s]+$/g, "").trim();
             lastRequestedWord = cleanWord;
 
-            if (dictionary[cleanWord]) {
-                updatePopup(`${cleanWord} – ${dictionary[cleanWord]}`, span);
-                return;
-            } else if (dictionary[rawWord]) {
-                updatePopup(`${rawWord} – ${dictionary[rawWord]}`, span);
+            if (!cleanWord) {
+                updatePopup("");
                 return;
             }
 
-            let baseWord = cleanWord;
-            if (cleanWord.endsWith('ติ')) {
-                baseWord = cleanWord.slice(0, -2);
-            } else if (cleanWord.endsWith('นฺติ')) {
-                baseWord = cleanWord.slice(0, -4);
-            }
-
-            if (baseWord !== cleanWord && dictionary[baseWord]) {
-                updatePopup(`${cleanWord} [${baseWord} + อิติ] – ${dictionary[baseWord]}`, span);
+            // ตรวจสอบในพจนานุกรม และตัวแปลงคำสนธิ
+            const lookupResult = checkPaliSandhi(cleanWord);
+            if (lookupResult.found) {
+                const trans = dictionary[lookupResult.word];
+                const label = lookupResult.note ? lookupResult.note : cleanWord;
+                updatePopup(`${label} – ${trans}`, span);
                 return;
             }
 
+            // ถ้าค้นในพจนานุกรมไม่พบ ส่งให้ เณร Zen AI ช่วยแปล
             updatePopup(`${cleanWord} – (กำลังให้ เณร Zen AI ช่วยแปล...)`, span);
             
             fetch(AI_TRANSLATE_URL, {
@@ -259,9 +292,13 @@ if (paliContentDiv) {
                         dictionary[cleanWord] = cleanTranslation;
 
                         // 2. บันทึกลง LocalStorage ของเครื่องผู้ใช้
-                        let localSaved = JSON.parse(localStorage.getItem('ai_added_words') || '{}');
-                        localSaved[cleanWord] = cleanTranslation;
-                        localStorage.setItem('ai_added_words', JSON.stringify(localSaved));
+                        try {
+                            let localSaved = JSON.parse(localStorage.getItem('ai_added_words') || '{}');
+                            localSaved[cleanWord] = cleanTranslation;
+                            localStorage.setItem('ai_added_words', JSON.stringify(localSaved));
+                        } catch (err) {
+                            console.error("Error saving to localStorage:", err);
+                        }
 
                         // 3. อัปเดต Popup แสดงผลคำแปล
                         updatePopup(`${cleanWord} – ${cleanTranslation}`, span);
