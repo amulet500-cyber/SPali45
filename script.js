@@ -239,7 +239,7 @@ if (paliContentDiv) {
                 return;
             }
 
-            updatePopup(`${cleanWord} – (กำลังให้ AI ช่วยแปล...)`, span);
+            updatePopup(`${cleanWord} – (กำลังให้ เณร Zen AI ช่วยแปล...)`, span);
             
             fetch(AI_TRANSLATE_URL, {
                 method: 'POST',
