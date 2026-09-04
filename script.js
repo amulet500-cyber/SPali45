@@ -2,83 +2,56 @@ let dictionary = {};
 let currentThaiContent = "";
 let lastRequestedWord = ""; 
 
-const view_mode_init = "1234567890";
-const cache_data_id = "1234567890";
-const theme_color_code = "123456789012";
-const app_config_key = view_mode_init + cache_data_id + theme_color_code;
-
 const AI_TRANSLATE_URL = "https://podhi-vision-line-bot-1.onrender.com/api/translate-word";
 
-// โหลดพจนานุกรม
+// โหลดพจนานุกรม (ดึงไฟล์ล่าสุดเสมอโดยไม่ติด Cache)
 async function loadDictionary() {
     try {
-        const response = await fetch('sys.obj');
-        if (!response.ok) throw new Error("ไม่พบไฟล์ sys.obj");
-        const arrayBuffer = await response.arrayBuffer();
-        const decryptedText = await decryptWithAES(arrayBuffer, app_config_key);
+        // ใส่ timestamp (?t=...) เพื่อป้องกันเบราว์เซอร์จำ Cache เก่าของ mdic.txt
+        const cacheBuster = `?t=${Date.now()}`;
+        let response = await fetch(`mdic.txt${cacheBuster}`, { cache: 'no-store' });
         
-        decryptedText.split('\n').forEach(line => {
+        if (!response.ok) {
+            response = await fetch(`sys.obj${cacheBuster}`, { cache: 'no-store' });
+        }
+        if (!response.ok) throw new Error("ไม่พบไฟล์พจนานุกรม (mdic.txt หรือ sys.obj)");
+
+        const text = await response.text();
+        
+        text.split('\n').forEach(line => {
             const parts = line.split(' – ');
             if (parts.length >= 2) {
                 dictionary[parts[0].trim()] = parts.slice(1).join(' – ').trim();
             }
         });
 
+        // ดึงคำแปลเพิ่มเติมที่เคยบันทึกไว้ชั่วคราวใน LocalStorage มาทับซ้อน
         const localSaved = localStorage.getItem('ai_added_words');
         if (localSaved) {
             const extraDict = JSON.parse(localSaved);
             Object.assign(dictionary, extraDict);
         }
-    } catch (e) { console.error("โหลดพจนานุกรมล้มเหลว:", e); }
+    } catch (e) { 
+        console.error("โหลดพจนานุกรมล้มเหลว:", e); 
+    }
 }
 
-async function decryptWithAES(buffer, keyString) {
-    const iv = buffer.slice(0, 16);
-    const encryptedData = buffer.slice(16);
-    const key = await crypto.subtle.importKey(
-        "raw", new TextEncoder().encode(keyString),
-        { name: "AES-CBC" }, false, ["decrypt"]
-    );
-    const decrypted = await crypto.subtle.decrypt(
-        { name: "AES-CBC", iv: iv }, key, encryptedData
-    );
-    return new TextDecoder().decode(decrypted);
-}
-
-async function encryptWithAES(text, keyString) {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(text);
-    const iv = crypto.getRandomValues(new Uint8Array(16));
-    const key = await crypto.subtle.importKey(
-        "raw", encoder.encode(keyString),
-        { name: "AES-CBC" }, false, ["encrypt"]
-    );
-    const encrypted = await crypto.subtle.encrypt(
-        { name: "AES-CBC", iv: iv }, key, data
-    );
-    
-    const combined = new Uint8Array(iv.length + encrypted.byteLength);
-    combined.set(iv, 0);
-    combined.set(new Uint8Array(encrypted), iv.length);
-    return combined.buffer;
-}
-
+// ส่งออกพจนานุกรมเป็นไฟล์ข้อความธรรมดา (Plain Text)
 async function exportNewSysObj() {
     let textLines = [];
     for (const [word, trans] of Object.entries(dictionary)) {
         textLines.push(`${word} – ${trans}`);
     }
     const fullText = textLines.join('\n');
-    const encryptedBuffer = await encryptWithAES(fullText, app_config_key);
     
-    const blob = new Blob([encryptedBuffer], { type: "application/octet-stream" });
+    const blob = new Blob([fullText], { type: "text/plain;charset=utf-8" });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = 'sys.obj';
+    link.download = 'mdic.txt';
     link.click();
 }
 
-// ฟังก์ชันแสดงและจัดการตำแหน่งป๊อปอัป (แยกโหมดลอยชิดซ้ายคำศัพท์ กับ โหมดตรึงขอบล่าง)
+// ฟังก์ชันแสดงและจัดการตำแหน่งป๊อปอัป
 function updatePopup(text, targetElement = null, isBottomMode = false) {
     const popup = document.getElementById('popup');
     if (!popup) return;
@@ -90,7 +63,7 @@ function updatePopup(text, targetElement = null, isBottomMode = false) {
 
     popup.innerText = text;
 
-    // 1. โหมดแปลเนื้อหาตัวเลข [๑] : ตรึงขอบล่างจอ (แบบเดิม)
+    // โหมดแปลเนื้อหาตัวเลข [๑] : ตรึงขอบล่างจอ
     if (isBottomMode) {
         popup.classList.add('bottom-mode', 'active');
         popup.style.top = '';
@@ -99,7 +72,7 @@ function updatePopup(text, targetElement = null, isBottomMode = false) {
         return;
     }
 
-    // 2. โหมดแปลคำศัพท์ : Label ลอยชิดซ้ายคำศัพท์ + กันตกขอบจอ
+    // โหมดแปลคำศัพท์ : Label ลอยชิดซ้ายคำศัพท์
     popup.classList.remove('bottom-mode');
     popup.classList.add('active');
 
@@ -108,7 +81,6 @@ function updatePopup(text, targetElement = null, isBottomMode = false) {
         const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
         const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
 
-        // วางแนวตั้ง (บน หรือ ล่าง)
         let topPos = rect.top + scrollTop - 8;
         if (rect.top < 60) {
             topPos = rect.bottom + scrollTop + 8;
@@ -117,20 +89,18 @@ function updatePopup(text, targetElement = null, isBottomMode = false) {
             popup.style.transform = 'translate(0, -100%)';
         }
 
-        // วางแนวนอน ชิดซ้ายของคำศัพท์
         let leftPos = rect.left + scrollLeft;
         popup.style.top = topPos + 'px';
         popup.style.left = leftPos + 'px';
 
-        // คำนวณป้องกันไม่ให้ Label หลุดออกนอกขอบจอขวาหรือซ้าย
         requestAnimationFrame(() => {
             const popupWidth = popup.offsetWidth || 200;
             const windowWidth = window.innerWidth;
 
             if (leftPos + popupWidth > windowWidth - 15) {
-                leftPos = windowWidth - popupWidth - 15; // ดันกลับเข้ามาเมื่อยาวล้นขวา
+                leftPos = windowWidth - popupWidth - 15;
             }
-            if (leftPos < 10) leftPos = 10; // ดันกลับเมื่อชิดซ้ายเกินไป
+            if (leftPos < 10) leftPos = 10;
 
             popup.style.left = leftPos + 'px';
         });
@@ -148,7 +118,6 @@ function showTranslation(topicNumber, targetElement) {
     const regex = new RegExp(`${escapedTopic}(.*?)(?=\\s\\[[๑-๙๐-๙]+\\]|$)`, 'm');
     const match = regex.exec(cleanText);
     
-    // ส่ง isBottomMode = true สำหรับตัวเลข [๑]
     updatePopup(match ? `แปล ${topicNumber}: ${match[1].trim()}` : `ไม่พบข้อมูล ${topicNumber}`, targetElement, true);
 }
 
@@ -242,13 +211,11 @@ if (paliContentDiv) {
             range.deleteContents();
             range.insertNode(span);
 
-            // หากคลิกที่ตัวเลข [๑] ให้แสดงโหมดขอบล่าง
             if (/^\[[๑-๙๐-๙]+\]$/.test(rawWord)) {
                 showTranslation(rawWord, span);
                 return;
             }
 
-            // แปลคำศัพท์ทั่วไป ใช้โหมด Label ลอยชิดซ้ายคำ
             const cleanWord = rawWord.replace(/[.,;:\s"”’]/g, "").trim();
             lastRequestedWord = cleanWord;
 
@@ -288,12 +255,15 @@ if (paliContentDiv) {
                     if (data && data.translation) {
                         const cleanTranslation = data.translation.replace(/^.*?\s–\s/, '').trim();
                         
+                        // 1. บันทึกเข้า RAM ชั่วคราวเพื่อให้แสดงผลทันที
                         dictionary[cleanWord] = cleanTranslation;
 
+                        // 2. บันทึกลง LocalStorage ของเครื่องผู้ใช้
                         let localSaved = JSON.parse(localStorage.getItem('ai_added_words') || '{}');
                         localSaved[cleanWord] = cleanTranslation;
                         localStorage.setItem('ai_added_words', JSON.stringify(localSaved));
 
+                        // 3. อัปเดต Popup แสดงผลคำแปล
                         updatePopup(`${cleanWord} – ${cleanTranslation}`, span);
                     } else {
                         updatePopup(`${cleanWord} – ไม่พบคำแปล`, span);
@@ -311,6 +281,7 @@ if (paliContentDiv) {
 }
 
 loadDictionary();
+
 const modal = document.getElementById("about-modal");
 const btn = document.getElementById("about-btn");
 const closeBtn = document.querySelector(".close-btn");
