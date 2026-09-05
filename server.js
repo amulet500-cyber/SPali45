@@ -21,12 +21,15 @@ async function translateWithGemini(word) {
         })
     });
 
-    if (!response.ok) throw new Error(`Gemini API Error: ${response.statusText}`);
+    if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Gemini API Error (${response.status}): ${errText}`);
+    }
     const data = await response.json();
     return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "ไม่พบคำแปล";
 }
 
-// 2. ฟังก์ชันอัปเดตไฟล์ mdic.txt ลง GitHub อัตโนมัติ
+// 2. ฟังก์ชันอัปเดตไฟล์ mdic.txt ลง GitHub อัตโนมัติ (Auto-Save)
 async function commitWordToGithub(word, translation) {
     const owner = process.env.GITHUB_OWNER;
     const repo = process.env.GITHUB_REPO;
@@ -50,11 +53,16 @@ async function commitWordToGithub(word, translation) {
     if (!getRes.ok) throw new Error(`ไม่สามารถอ่านไฟล์จาก GitHub ได้: ${getRes.statusText}`);
     const fileData = await getRes.json();
 
-    const currentText = Buffer.from(fileData.content, 'base64').toString('utf-8');
+    // ถอดรหัส base64 โดยลบ newlines ออกก่อนเพื่อป้องกันข้อผิดพลาดอักขระ
+    const base64Content = fileData.content.replace(/\n/g, '');
+    const currentText = Buffer.from(base64Content, 'base64').toString('utf-8');
     const sha = fileData.sha;
 
-    // เช็กว่ามีคำนี้อยู่แล้วหรือยัง หากมีแล้วไม่ต้องเขียนซ้ำ
-    if (currentText.includes(`${word} –`)) return;
+    // เช็กว่ามีคำนี้อยู่แล้วหรือยัง (ตรวจสอบทั้งเครื่องหมาย – และ =)
+    if (currentText.includes(`${word} –`) || currentText.includes(`${word} =`)) {
+        console.log(`คำศัพท์ [${word}] มีอยู่ใน mdic.txt แล้ว ข้ามการบันทึก`);
+        return;
+    }
 
     // ต่อคำศัพท์ใหม่ไว้บรรทัดล่างสุด
     const updatedText = currentText.trim() + `\n${word} – ${translation}`;
@@ -87,12 +95,12 @@ app.post('/api/translate-word', async (req, res) => {
         // แปลภาษาด้วย Gemini
         const translation = await translateWithGemini(word);
 
-        // สั่งบันทึกลง GitHub ในเบื้องหลัง
+        // สั่งบันทึกลง GitHub ในเบื้องหลัง (Background Process)
         commitWordToGithub(word, translation).catch(err => {
             console.error("GitHub Background Task Error:", err);
         });
 
-        // ส่งผลลัพธ์กลับไปให้หน้าเว็บทันที
+        // ส่งผลลัพธ์กลับไปให้หน้าเว็บทันที ไม่ต้องรอ Commit เสร็จ
         res.json({ translation: `${word} – ${translation}` });
 
     } catch (error) {
