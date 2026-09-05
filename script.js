@@ -4,27 +4,43 @@ let lastRequestedWord = "";
 
 const AI_TRANSLATE_URL = "https://podhi-vision-line-bot-1.onrender.com/api/translate-word";
 
-// โหลดพจนานุกรม (ดึงไฟล์ล่าสุดเสมอโดยไม่ติด Cache)
+// โหลดพจนานุกรม (โหลดทั้ง mdic.txt และ ai_words.txt เข้าหน่วยความจำ RAM)
 async function loadDictionary() {
     try {
         const cacheBuster = `?t=${Date.now()}`;
+
+        // 1. โหลดไฟล์พจนานุกรมหลัก (mdic.txt หรือ sys.obj)
         let response = await fetch(`mdic.txt${cacheBuster}`, { cache: 'no-store' });
-        
         if (!response.ok) {
             response = await fetch(`sys.obj${cacheBuster}`, { cache: 'no-store' });
         }
-        if (!response.ok) throw new Error("ไม่พบไฟล์พจนานุกรม (mdic.txt หรือ sys.obj)");
+        if (response.ok) {
+            const text = await response.text();
+            text.split('\n').forEach(line => {
+                const parts = line.split(' – ');
+                if (parts.length >= 2) {
+                    dictionary[parts[0].trim()] = parts.slice(1).join(' – ').trim();
+                }
+            });
+        }
 
-        const text = await response.text();
-        
-        text.split('\n').forEach(line => {
-            const parts = line.split(' – ');
-            if (parts.length >= 2) {
-                dictionary[parts[0].trim()] = parts.slice(1).join(' – ').trim();
+        // 2. โหลดไฟล์ ai_words.txt (คำศัพท์ที่ AI เคยช่วยแปลไว้บน GitHub)
+        try {
+            const aiResponse = await fetch(`ai_words.txt${cacheBuster}`, { cache: 'no-store' });
+            if (aiResponse.ok) {
+                const aiText = await aiResponse.text();
+                aiText.split('\n').forEach(line => {
+                    const parts = line.split(' – ');
+                    if (parts.length >= 2) {
+                        dictionary[parts[0].trim()] = parts.slice(1).join(' – ').trim();
+                    }
+                });
             }
-        });
+        } catch (aiErr) {
+            console.log("ยังไม่มีไฟล์ ai_words.txt บน GitHub หรือโหลดไม่สำเร็จ (ข้ามได้):", aiErr);
+        }
 
-        // ดึงคำแปลเพิ่มเติมที่เคยบันทึกไว้ใน LocalStorage มาทับซ้อน
+        // 3. ดึงคำแปลเพิ่มเติมที่เคยบันทึกไว้ใน LocalStorage มาทับซ้อน
         const localSaved = localStorage.getItem('ai_added_words');
         if (localSaved) {
             try {
@@ -262,7 +278,7 @@ if (paliContentDiv) {
                 return;
             }
 
-            // ตรวจสอบในพจนานุกรม และตัวแปลงคำสนธิ
+            // ตรวจสอบในพจนานุกรม (ค้นรวมทั้ง mdic.txt, ai_words.txt และ LocalStorage)
             const lookupResult = checkPaliSandhi(cleanWord);
             if (lookupResult.found) {
                 const trans = dictionary[lookupResult.word];

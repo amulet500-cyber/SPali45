@@ -29,12 +29,12 @@ async function translateWithGemini(word) {
     return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "ไม่พบคำแปล";
 }
 
-// 2. ฟังก์ชันอัปเดตไฟล์ mdic.txt ลง GitHub อัตโนมัติ (Auto-Save)
+// 2. ฟังก์ชันอัปเดตไฟล์ ai_words.txt ลง GitHub อัตโนมัติ (Auto-Save แยกไฟล์)
 async function commitWordToGithub(word, translation) {
     const owner = process.env.GITHUB_OWNER;
     const repo = process.env.GITHUB_REPO;
     const token = process.env.GITHUB_TOKEN;
-    const filePath = 'mdic.txt';
+    const filePath = 'ai_words.txt'; // เปลี่ยนมาใช้ ai_words.txt เพื่อหลีกเลี่ยงขีดจำกัด 1MB ของ GitHub API
 
     if (!owner || !repo || !token) {
         console.warn("ไม่ได้ตั้งค่า GITHUB credentials ข้ามการ Commit");
@@ -48,41 +48,52 @@ async function commitWordToGithub(word, translation) {
         'User-Agent': 'NodeJS-Render-Bot'
     };
 
-    // ดึงเนื้อหาปัจจุบัน และ sha ของไฟล์ mdic.txt บน GitHub
+    let currentText = "";
+    let sha = null;
+
+    // อ่านเนื้อหาปัจจุบันของ ai_words.txt บน GitHub
     const getRes = await fetch(apiUrl, { headers });
-    if (!getRes.ok) throw new Error(`ไม่สามารถอ่านไฟล์จาก GitHub ได้: ${getRes.statusText}`);
-    const fileData = await getRes.json();
+    if (getRes.ok) {
+        const fileData = await getRes.json();
+        const base64Content = fileData.content.replace(/\n/g, '');
+        currentText = Buffer.from(base64Content, 'base64').toString('utf-8');
+        sha = fileData.sha;
+    } else if (getRes.status !== 404) {
+        // หากเกิด error อื่นๆ ที่ไม่ใช่ 404 (ไม่พบไฟล์) ให้บันทึก log แล้วข้าม
+        console.error(`ไม่สามารถอ่านไฟล์จาก GitHub ได้ (Status: ${getRes.status})`);
+        return;
+    }
+    // หมายเหตุ: ถ้าเป็น 404 แปลว่ายังไม่มีไฟล์ ai_words.txt ระบบจะทำการสร้างไฟล์ใหม่ให้ในการ PUT ด้านล่าง
 
-    // ถอดรหัส base64 โดยลบ newlines ออกก่อนเพื่อป้องกันข้อผิดพลาดอักขระ
-    const base64Content = fileData.content.replace(/\n/g, '');
-    const currentText = Buffer.from(base64Content, 'base64').toString('utf-8');
-    const sha = fileData.sha;
-
-    // เช็กว่ามีคำนี้อยู่แล้วหรือยัง (ตรวจสอบทั้งเครื่องหมาย – และ =)
+    // เช็กว่ามีคำนี้อยู่แล้วหรือยัง
     if (currentText.includes(`${word} –`) || currentText.includes(`${word} =`)) {
-        console.log(`คำศัพท์ [${word}] มีอยู่ใน mdic.txt แล้ว ข้ามการบันทึก`);
+        console.log(`คำศัพท์ [${word}] มีอยู่ใน ai_words.txt แล้ว ข้ามการบันทึก`);
         return;
     }
 
     // ต่อคำศัพท์ใหม่ไว้บรรทัดล่างสุด
-    const updatedText = currentText.trim() + `\n${word} – ${translation}`;
+    const newLine = `${word} – ${translation}`;
+    const updatedText = currentText ? `${currentText.trim()}\n${newLine}` : newLine;
     const encodedContent = Buffer.from(updatedText, 'utf-8').toString('base64');
 
-    // ส่งคำสั่ง PUT เพื่อบันทึกไฟล์ทับลง GitHub
+    // โครงสร้าง Body สำหรับส่งไปยัง GitHub API
+    const bodyData = {
+        message: `auto: Add AI translation [${word}]`,
+        content: encodedContent
+    };
+    if (sha) bodyData.sha = sha; // ใส่ sha เฉพาะกรณีอัปเดตไฟล์เดิม
+
+    // ส่งคำสั่ง PUT เพื่อบันทึกไฟล์ลง GitHub
     const putRes = await fetch(apiUrl, {
         method: 'PUT',
         headers,
-        body: JSON.stringify({
-            message: `auto: Add word translation [${word}]`,
-            content: encodedContent,
-            sha: sha
-        })
+        body: JSON.stringify(bodyData)
     });
 
     if (!putRes.ok) {
         console.error("Commit to GitHub Failed:", await putRes.text());
     } else {
-        console.log(`บันทึกคำศัพท์ [${word}] ลง GitHub เรียบร้อยแล้ว`);
+        console.log(`บันทึกคำศัพท์ [${word}] ลง ai_words.txt บน GitHub เรียบร้อยแล้ว`);
     }
 }
 
