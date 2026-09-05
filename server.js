@@ -1,11 +1,20 @@
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 1. ฟังก์ชันแปลคำศัพท์ด้วย Gemini API
+// 1. ให้ Express เปิดบริการไฟล์ Static ทั้งหมดในโฟลเดอร์ (index.html, script.js, style.css, ai_words.txt)
+app.use(express.static(__dirname));
+
+// 2. ส่งหน้า index.html เมื่อเปิดหน้าแรกของเว็บ (/)
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// 3. ฟังก์ชันแปลคำศัพท์ด้วย Gemini API
 async function translateWithGemini(word) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) throw new Error("GEMINI_API_KEY is not set");
@@ -29,12 +38,12 @@ async function translateWithGemini(word) {
     return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "ไม่พบคำแปล";
 }
 
-// 2. ฟังก์ชันอัปเดตไฟล์ ai_words.txt ลง GitHub อัตโนมัติ (Auto-Save แยกไฟล์)
+// 4. ฟังก์ชันอัปเดตไฟล์ ai_words.txt ลง GitHub อัตโนมัติ (Auto-Save)
 async function commitWordToGithub(word, translation) {
     const owner = process.env.GITHUB_OWNER;
     const repo = process.env.GITHUB_REPO;
     const token = process.env.GITHUB_TOKEN;
-    const filePath = 'ai_words.txt'; // เปลี่ยนมาใช้ ai_words.txt เพื่อหลีกเลี่ยงขีดจำกัด 1MB ของ GitHub API
+    const filePath = 'ai_words.txt';
 
     if (!owner || !repo || !token) {
         console.warn("ไม่ได้ตั้งค่า GITHUB credentials ข้ามการ Commit");
@@ -59,11 +68,9 @@ async function commitWordToGithub(word, translation) {
         currentText = Buffer.from(base64Content, 'base64').toString('utf-8');
         sha = fileData.sha;
     } else if (getRes.status !== 404) {
-        // หากเกิด error อื่นๆ ที่ไม่ใช่ 404 (ไม่พบไฟล์) ให้บันทึก log แล้วข้าม
         console.error(`ไม่สามารถอ่านไฟล์จาก GitHub ได้ (Status: ${getRes.status})`);
         return;
     }
-    // หมายเหตุ: ถ้าเป็น 404 แปลว่ายังไม่มีไฟล์ ai_words.txt ระบบจะทำการสร้างไฟล์ใหม่ให้ในการ PUT ด้านล่าง
 
     // เช็กว่ามีคำนี้อยู่แล้วหรือยัง
     if (currentText.includes(`${word} –`) || currentText.includes(`${word} =`)) {
@@ -76,12 +83,11 @@ async function commitWordToGithub(word, translation) {
     const updatedText = currentText ? `${currentText.trim()}\n${newLine}` : newLine;
     const encodedContent = Buffer.from(updatedText, 'utf-8').toString('base64');
 
-    // โครงสร้าง Body สำหรับส่งไปยัง GitHub API
     const bodyData = {
         message: `auto: Add AI translation [${word}]`,
         content: encodedContent
     };
-    if (sha) bodyData.sha = sha; // ใส่ sha เฉพาะกรณีอัปเดตไฟล์เดิม
+    if (sha) bodyData.sha = sha;
 
     // ส่งคำสั่ง PUT เพื่อบันทึกไฟล์ลง GitHub
     const putRes = await fetch(apiUrl, {
@@ -97,21 +103,18 @@ async function commitWordToGithub(word, translation) {
     }
 }
 
-// 3. Endpoint สำหรับรับคำขอแปลจากหน้าเว็บ
+// 5. Endpoint สำหรับรับคำขอแปลจากหน้าเว็บ
 app.post('/api/translate-word', async (req, res) => {
     try {
         const { word } = req.body;
         if (!word) return res.status(400).json({ error: "ไม่พบคำศัพท์ที่ส่งมา" });
 
-        // แปลภาษาด้วย Gemini
         const translation = await translateWithGemini(word);
 
-        // สั่งบันทึกลง GitHub ในเบื้องหลัง (Background Process)
         commitWordToGithub(word, translation).catch(err => {
             console.error("GitHub Background Task Error:", err);
         });
 
-        // ส่งผลลัพธ์กลับไปให้หน้าเว็บทันที ไม่ต้องรอ Commit เสร็จ
         res.json({ translation: `${word} – ${translation}` });
 
     } catch (error) {
