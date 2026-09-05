@@ -2,7 +2,8 @@ let dictionary = {};
 let currentThaiContent = "";
 let lastRequestedWord = ""; 
 
-const AI_TRANSLATE_URL = "https://podhi-vision-line-bot-1.onrender.com/api/translate-word";
+// แก้ไขให้เรียก API บน Server ตัวเองโดยตรง
+const AI_TRANSLATE_URL = "/api/translate-word";
 
 // โหลดพจนานุกรม (โหลดทั้ง mdic.txt และ ai_words.txt เข้าหน่วยความจำ RAM)
 async function loadDictionary() {
