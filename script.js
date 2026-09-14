@@ -1,8 +1,10 @@
 let dictionary = {};
 let currentThaiContent = "";
 let lastRequestedWord = ""; 
+let lastProcessedWord = "";
+let hoverTimer = null;
 
-// แก้ไขให้เรียก API บน Server ตัวเองโดยตรง
+// เรียก API บน Server ตัวเองโดยตรง
 const AI_TRANSLATE_URL = "/api/translate-word";
 
 // โหลดพจนานุกรม (โหลดทั้ง mdic.txt และ ai_words.txt เข้าหน่วยความจำ RAM)
@@ -171,6 +173,8 @@ if (selector) {
 
         contentDiv.innerText = "กำลังโหลด...";
         currentThaiContent = "";
+        lastProcessedWord = "";
+        clearHighlights();
         updatePopup(""); 
         try {
             const [paliRes, thaiRes] = await Promise.all([fetch(`b${bookNum}.txt`), fetch(`t${bookNum}.txt`)]);
@@ -229,108 +233,151 @@ function checkPaliSandhi(word) {
     return { found: false, word: word, note: "" };
 }
 
+// ฟังก์ชันล้างแถบไฮไลท์คำเก่าออก
+function clearHighlights() {
+    const currentHighlights = document.querySelectorAll('.highlight-pali');
+    currentHighlights.forEach(el => {
+        const parent = el.parentNode;
+        if (parent) {
+            parent.replaceChild(document.createTextNode(el.textContent), el);
+            parent.normalize();
+        }
+    });
+}
+
+// ฟังก์ชันหลักในการค้นหาและแปลคำศัพท์ตรงตำแหน่งพิกัด X, Y
+function processWordAtPoint(clientX, clientY, isClickEvent = false) {
+    const r = getRangeFromPoint(clientX, clientY);
+    if (!r) return;
+
+    let n = r.startContainer, o = r.startOffset, t = n.textContent;
+    if (!t || n.nodeType !== Node.TEXT_NODE) return;
+
+    let start = o, end = o;
+    while (start > 0 && t[start - 1] !== ' ' && t[start - 1] !== '\n' && t[start - 1] !== '\t') start--;
+    while (end < t.length && t[end] !== ' ' && t[end] !== '\n' && t[end] !== '\t') end++;
+    
+    let rawWord = t.substring(start, end).trim();
+    if (!rawWord) {
+        if (!isClickEvent) {
+            clearHighlights();
+            updatePopup("");
+            lastProcessedWord = "";
+        }
+        return;
+    }
+
+    const cleanWord = rawWord.replace(/^[.,;:!?"”’‘'()«»\[\]\s]+|[.,;:!?"”’‘'()«»\[\]\s]+$/g, "").trim();
+
+    // หากเป็นคำเดิมที่แสดงอยู่แล้ว ให้ข้ามการประมวลผลซ้ำ (เว้นแต่เป็นการกดคลิก)
+    if (!isClickEvent && cleanWord === lastProcessedWord && document.getElementById('popup')?.classList.contains('active')) {
+        return;
+    }
+
+    clearHighlights();
+
+    const span = document.createElement('span');
+    span.className = 'highlight-pali';
+    span.textContent = rawWord;
+
+    const range = document.createRange();
+    range.setStart(n, start);
+    range.setEnd(n, end);
+    range.deleteContents();
+    range.insertNode(span);
+
+    // ตรวจสอบว่าเป็นข้อความแปลตามหมวด [๑] หรือไม่
+    const bracketMatch = rawWord.match(/\[[๑-๙๐-๙]+\]/);
+    if (bracketMatch) {
+        lastProcessedWord = rawWord;
+        showTranslation(bracketMatch[0], span);
+        return;
+    }
+
+    if (!cleanWord) {
+        updatePopup("");
+        lastProcessedWord = "";
+        return;
+    }
+
+    lastProcessedWord = cleanWord;
+    lastRequestedWord = cleanWord;
+
+    // ตรวจสอบในพจนานุกรม (ค้นรวมทั้ง mdic.txt, ai_words.txt และ LocalStorage)
+    const lookupResult = checkPaliSandhi(cleanWord);
+    if (lookupResult.found) {
+        const trans = dictionary[lookupResult.word];
+        const label = lookupResult.note ? lookupResult.note : cleanWord;
+        updatePopup(`${label} – ${trans}`, span);
+        return;
+    }
+
+    // ถ้าค้นในพจนานุกรมไม่พบ ส่งให้ เณร Zen AI ช่วยแปล
+    updatePopup(`${cleanWord} – (กำลังให้ เณร Zen AI ช่วยแปล...)`, span);
+    
+    fetch(AI_TRANSLATE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ word: cleanWord })
+    })
+    .then(response => {
+        if (!response.ok) throw new Error("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้");
+        return response.json();
+    })
+    .then(data => {
+        if (lastRequestedWord === cleanWord) {
+            if (data && data.translation) {
+                const cleanTranslation = data.translation.replace(/^.*?\s–\s/, '').trim();
+                
+                // 1. บันทึกเข้า RAM ชั่วคราวเพื่อให้แสดงผลทันที
+                dictionary[cleanWord] = cleanTranslation;
+
+                // 2. บันทึกลง LocalStorage ของเครื่องผู้ใช้
+                try {
+                    let localSaved = JSON.parse(localStorage.getItem('ai_added_words') || '{}');
+                    localSaved[cleanWord] = cleanTranslation;
+                    localStorage.setItem('ai_added_words', JSON.stringify(localSaved));
+                } catch (err) {
+                    console.error("Error saving to localStorage:", err);
+                }
+
+                // 3. อัปเดต Popup แสดงผลคำแปล
+                updatePopup(`${cleanWord} – ${cleanTranslation}`, span);
+            } else {
+                updatePopup(`${cleanWord} – ไม่พบคำแปล`, span);
+            }
+        }
+    })
+    .catch(err => {
+        console.error("AI Translation Error:", err);
+        if (lastRequestedWord === cleanWord) {
+            updatePopup(`${cleanWord} – ไม่พบคำแปลในระบบ`, span);
+        }
+    });
+}
+
+// ผูก Event Listeners สำหรับการชี้เมาส์ (Hover) และการคลิก/แตะหน้าจอ
 const paliContentDiv = document.getElementById('pali-content');
 if (paliContentDiv) {
+    // 1. เลื่อนเมาส์ชี้เพื่อแปลคำศัพท์ (สำหรับ Desktop / PC)
+    paliContentDiv.addEventListener('mousemove', (e) => {
+        clearTimeout(hoverTimer);
+        hoverTimer = setTimeout(() => {
+            processWordAtPoint(e.clientX, e.clientY, false);
+        }, 30); // หน่วง 30ms เพื่อความลื่นไหลของ UI
+    });
+
+    // 2. คลิกเพื่อแปลคำศัพท์ (สำหรับ Mobile / Tablet หรือคลิกซ้ำ)
     paliContentDiv.addEventListener('click', (e) => {
-        const currentHighlights = document.querySelectorAll('.highlight-pali');
-        currentHighlights.forEach(el => {
-            const parent = el.parentNode;
-            if (parent) {
-                parent.replaceChild(document.createTextNode(el.textContent), el);
-                parent.normalize();
-            }
-        });
+        processWordAtPoint(e.clientX, e.clientY, true);
+    });
 
-        const r = getRangeFromPoint(e.clientX, e.clientY);
-        if (r) {
-            let n = r.startContainer, o = r.startOffset, t = n.textContent;
-            if (!t || n.nodeType !== Node.TEXT_NODE) return;
-
-            let start = o, end = o;
-            while (start > 0 && t[start - 1] !== ' ' && t[start - 1] !== '\n' && t[start - 1] !== '\t') start--;
-            while (end < t.length && t[end] !== ' ' && t[end] !== '\n' && t[end] !== '\t') end++;
-            
-            let rawWord = t.substring(start, end).trim();
-            if (!rawWord) { updatePopup(""); return; }
-
-            const span = document.createElement('span');
-            span.className = 'highlight-pali';
-            span.textContent = rawWord;
-
-            const range = document.createRange();
-            range.setStart(n, start);
-            range.setEnd(n, end);
-            range.deleteContents();
-            range.insertNode(span);
-
-            // ตรวจสอบว่าเป็นข้อความแปลตามหมวด [๑] หรือไม่
-            const bracketMatch = rawWord.match(/\[[๑-๙๐-๙]+\]/);
-            if (bracketMatch) {
-                showTranslation(bracketMatch[0], span);
-                return;
-            }
-
-            // ทำความสะอาดคำศัพท์ ตัดเครื่องหมายอักขระพิเศษรอบนอกออก
-            const cleanWord = rawWord.replace(/^[.,;:!?"”’‘'()«»\[\]\s]+|[.,;:!?"”’‘'()«»\[\]\s]+$/g, "").trim();
-            lastRequestedWord = cleanWord;
-
-            if (!cleanWord) {
-                updatePopup("");
-                return;
-            }
-
-            // ตรวจสอบในพจนานุกรม (ค้นรวมทั้ง mdic.txt, ai_words.txt และ LocalStorage)
-            const lookupResult = checkPaliSandhi(cleanWord);
-            if (lookupResult.found) {
-                const trans = dictionary[lookupResult.word];
-                const label = lookupResult.note ? lookupResult.note : cleanWord;
-                updatePopup(`${label} – ${trans}`, span);
-                return;
-            }
-
-            // ถ้าค้นในพจนานุกรมไม่พบ ส่งให้ เณร Zen AI ช่วยแปล
-            updatePopup(`${cleanWord} – (กำลังให้ เณร Zen AI ช่วยแปล...)`, span);
-            
-            fetch(AI_TRANSLATE_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ word: cleanWord })
-            })
-            .then(response => {
-                if (!response.ok) throw new Error("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้");
-                return response.json();
-            })
-            .then(data => {
-                if (lastRequestedWord === cleanWord) {
-                    if (data && data.translation) {
-                        const cleanTranslation = data.translation.replace(/^.*?\s–\s/, '').trim();
-                        
-                        // 1. บันทึกเข้า RAM ชั่วคราวเพื่อให้แสดงผลทันที
-                        dictionary[cleanWord] = cleanTranslation;
-
-                        // 2. บันทึกลง LocalStorage ของเครื่องผู้ใช้
-                        try {
-                            let localSaved = JSON.parse(localStorage.getItem('ai_added_words') || '{}');
-                            localSaved[cleanWord] = cleanTranslation;
-                            localStorage.setItem('ai_added_words', JSON.stringify(localSaved));
-                        } catch (err) {
-                            console.error("Error saving to localStorage:", err);
-                        }
-
-                        // 3. อัปเดต Popup แสดงผลคำแปล
-                        updatePopup(`${cleanWord} – ${cleanTranslation}`, span);
-                    } else {
-                        updatePopup(`${cleanWord} – ไม่พบคำแปล`, span);
-                    }
-                }
-            })
-            .catch(err => {
-                console.error("AI Translation Error:", err);
-                if (lastRequestedWord === cleanWord) {
-                    updatePopup(`${cleanWord} – ไม่พบคำแปลในระบบ`, span);
-                }
-            });
-        }
+    // 3. เมื่อเมาส์ออกจากพื้นที่อ่าน ให้ซ่อนป๊อปอัปและล้างไฮไลท์
+    paliContentDiv.addEventListener('mouseleave', () => {
+        clearTimeout(hoverTimer);
+        clearHighlights();
+        updatePopup("");
+        lastProcessedWord = "";
     });
 }
 
