@@ -8,6 +8,56 @@ let localUpMdicHandle = null; // ตัวเก็บสิทธิ์กา�
 // เรียก API บน Server ตัวเองโดยตรง
 const AI_TRANSLATE_URL = "/api/translate-word";
 
+// สร้างปุ่มวงกลมดินสอลอย (FAB) ที่มุมขวาล่างหน้าจออัตโนมัติ
+function createFloatingEditButton() {
+    if (document.getElementById('fab-edit-btn')) return;
+
+    const fab = document.createElement('button');
+    fab.id = 'fab-edit-btn';
+    fab.innerHTML = '✏️';
+    fab.title = 'แก้ไขคำแปลคำศัพท์ที่เลือก';
+    fab.style.cssText = `
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        background-color: #ffd700;
+        color: #3e2723;
+        border: 2px solid #3e2723;
+        font-size: 24px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        cursor: pointer;
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: transform 0.2s, background-color 0.2s;
+    `;
+
+    fab.addEventListener('mouseenter', () => { fab.style.transform = 'scale(1.1)'; });
+    fab.addEventListener('mouseleave', () => { fab.style.transform = 'scale(1.0)'; });
+
+    fab.addEventListener('click', (e) => {
+        e.stopPropagation();
+        triggerEditCurrentWord();
+    });
+
+    document.body.appendChild(fab);
+}
+
+// ฟังก์ชันเปิดโหมดแก้ไขคำศัพท์ล่าสุดที่เลือกอยู่
+function triggerEditCurrentWord() {
+    if (!lastProcessedWord) {
+        alert("กรุณาชี้หรือแตะเลือกคำศัพท์บาลีก่อนครับ");
+        return;
+    }
+
+    const currentTranslation = dictionary[lastProcessedWord] || "";
+    makePopupEditable(lastProcessedWord, currentTranslation);
+}
+
 // ฟังก์ชันแยกตัดบรรทัดเข้าพจนานุกรม (รองรับทั้ง " – ", "\t", และ " ")
 function parseAndAddToDict(textData) {
     if (!textData) return;
@@ -37,12 +87,11 @@ function parseAndAddToDict(textData) {
     });
 }
 
-// โหลดพจนานุกรม (โหลด mdic.txt, ai_words.txt, upmdic.txt และ LocalStorage เข้า RAM)
+// โหลดพจนานุกรม
 async function loadDictionary() {
     try {
         const cacheBuster = `?t=${Date.now()}`;
 
-        // 1. โหลดไฟล์พจนานุกรมหลัก (mdic.txt หรือ sys.obj)
         let response = await fetch(`mdic.txt${cacheBuster}`, { cache: 'no-store' });
         if (!response.ok) {
             response = await fetch(`sys.obj${cacheBuster}`, { cache: 'no-store' });
@@ -52,7 +101,6 @@ async function loadDictionary() {
             parseAndAddToDict(text);
         }
 
-        // 2. โหลดไฟล์ ai_words.txt (คำศัพท์ที่ AI เคยช่วยแปลไว้บน GitHub)
         try {
             const aiResponse = await fetch(`ai_words.txt${cacheBuster}`, { cache: 'no-store' });
             if (aiResponse.ok) {
@@ -60,35 +108,28 @@ async function loadDictionary() {
                 parseAndAddToDict(aiText);
             }
         } catch (aiErr) {
-            console.log("ยังไม่มีไฟล์ ai_words.txt บน GitHub หรือโหลดไม่สำเร็จ (ข้ามได้):", aiErr);
+            console.log("ข้าม ai_words.txt:", aiErr);
         }
 
-        // 3. โหลดไฟล์ upmdic.txt (คำศัพท์ที่เคยแก้ไขเพิ่มเติมไว้บนเซิร์ฟเวอร์/ฮาร์ดดิสก์)
         try {
             const upResponse = await fetch(`upmdic.txt${cacheBuster}`, { cache: 'no-store' });
             if (upResponse.ok) {
                 const upText = await upResponse.text();
                 parseAndAddToDict(upText);
-                console.log("โหลด upmdic.txt สำเร็จ");
             }
         } catch (upErr) {
-            console.log("ยังไม่มีไฟล์ upmdic.txt บนเซิร์ฟเวอร์ (ข้ามได้):", upErr);
+            console.log("ข้าม upmdic.txt:", upErr);
         }
 
-        // 4. ดึงคำแปลที่เคยแก้ไขไว้ใน LocalStorage (upmdic_edits และ ai_added_words) มาทับซ้อนเป็นลำดับสุดท้าย
         const localUpEdits = localStorage.getItem('upmdic_edits');
-        if (localUpEdits) {
-            parseAndAddToDict(localUpEdits);
-        }
+        if (localUpEdits) parseAndAddToDict(localUpEdits);
 
         const localSaved = localStorage.getItem('ai_added_words');
         if (localSaved) {
             try {
                 const extraDict = JSON.parse(localSaved);
                 Object.assign(dictionary, extraDict);
-            } catch (jsonErr) {
-                console.error("Error parsing ai_added_words from localStorage:", jsonErr);
-            }
+            } catch (jsonErr) {}
         }
     } catch (e) { 
         console.error("โหลดพจนานุกรมล้มเหลว:", e); 
@@ -97,10 +138,8 @@ async function loadDictionary() {
 
 // ฟังก์ชันบันทึกคำแปลที่แก้ไขลง upmdic.txt บนฮาร์ดดิสก์ และ LocalStorage
 async function saveToLocalUpMdic(paliWord, newMeaning) {
-    // 1. บันทึกลง RAM ทันที
     dictionary[paliWord] = newMeaning;
 
-    // 2. บันทึกลง LocalStorage ของเบราว์เซอร์ไว้สำรอง
     let currentData = localStorage.getItem('upmdic_edits') || '';
     let lines = currentData.split('\n').filter(line => line.trim() !== '');
     
@@ -120,7 +159,6 @@ async function saveToLocalUpMdic(paliWord, newMeaning) {
     const updatedText = lines.join('\n') + '\n';
     localStorage.setItem('upmdic_edits', updatedText);
 
-    // 3. บันทึกลงไฟล์ upmdic.txt บนฮาร์ดดิสก์จริง
     try {
         if ('showSaveFilePicker' in window) {
             if (!localUpMdicHandle) {
@@ -136,84 +174,67 @@ async function saveToLocalUpMdic(paliWord, newMeaning) {
             const writable = await localUpMdicHandle.createWritable();
             await writable.write(updatedText);
             await writable.close();
-            console.log(`[บันทึกสำเร็จ] ${paliWord} -> upmdic.txt บนดิสก์`);
-        } else {
-            console.warn('เบราว์เซอร์นี้ไม่รองรับการเขียนไฟล์ลงดิสก์โดยตรง ระบบบันทึกลง LocalStorage แทนเรียบร้อย');
         }
     } catch (err) {
-        console.log('ยกเลิกการเลือกไฟล์ลงดิสก์ (ข้อมูลถูกเซฟไว้ใน LocalStorage เรียบร้อย):', err);
+        console.log('บันทึกลง LocalStorage สำเร็จ:', err);
     }
 }
 
-// ดักจับการกดปุ่ม F2 เพื่อแก้ไขคำแปล
-document.addEventListener('keydown', (e) => {
+// ฟังก์ชันเปลี่ยน Popup ให้เป็นช่องแก้ไขคำแปล
+function makePopupEditable(paliWord, currentTranslation) {
     const popup = document.getElementById('popup');
-    
-    if (e.key === 'F2' && popup && popup.classList.contains('active')) {
-        e.preventDefault();
+    if (!popup) return;
 
-        const currentText = popup.innerText.trim();
-        const parts = currentText.split('–');
-        const paliWord = parts[0] ? parts[0].trim() : "";
-        const currentTranslation = parts[1] ? parts[1].trim() : currentText;
+    popup.classList.add('active');
+    popup.innerHTML = `
+        <div style="display: flex; gap: 6px; align-items: center; pointer-events: auto;">
+            <span style="color: #ffd700; font-weight: bold; white-space: nowrap;">${paliWord} –</span>
+            <input type="text" id="edit-trans-input" value="${currentTranslation}" 
+                   style="font-size: 0.85em; padding: 4px 8px; border-radius: 6px; border: 1.5px solid #ffd700; background: #ffffff; color: #3e2723; outline: none; width: 180px; font-family: inherit;">
+            <button id="save-trans-btn" style="padding: 4px 8px; font-size: 0.8em; border: none; background: #ffd700; color: #3e2723; border-radius: 4px; cursor: pointer; font-weight: bold; white-space: nowrap;">บันทึก</button>
+        </div>
+    `;
 
-        popup.innerHTML = `
-            <div style="display: flex; gap: 6px; align-items: center; pointer-events: auto;">
-                <span style="color: #ffd700; font-weight: bold;">${paliWord} –</span>
-                <input type="text" id="edit-trans-input" value="${currentTranslation}" 
-                       style="font-size: 0.85em; padding: 4px 8px; border-radius: 6px; border: 1.5px solid #ffd700; background: #ffffff; color: #3e2723; outline: none; width: 240px; font-family: inherit;">
-            </div>
-        `;
+    const inputEl = document.getElementById('edit-trans-input');
+    const saveBtn = document.getElementById('save-trans-btn');
 
-        const inputEl = document.getElementById('edit-trans-input');
-        if (inputEl) {
-            inputEl.focus();
-            inputEl.select();
+    if (inputEl) {
+        inputEl.focus();
+        inputEl.select();
 
-            let isSaved = false;
+        let isSaved = false;
+        const handleSave = async () => {
+            if (isSaved) return;
+            isSaved = true;
 
-            const handleSave = async () => {
-                if (isSaved) return;
-                isSaved = true;
+            const newTranslation = inputEl.value.trim();
+            if (!newTranslation) {
+                updatePopup(`${paliWord} – ${currentTranslation}`);
+                return;
+            }
 
-                const newTranslation = inputEl.value.trim();
-                if (!newTranslation) {
-                    popup.innerText = currentText;
-                    return;
-                }
+            updatePopup(`${paliWord} – ${newTranslation}`);
+            await saveToLocalUpMdic(paliWord, newTranslation);
+        };
 
-                popup.innerText = `${paliWord} – ${newTranslation}`;
-                await saveToLocalUpMdic(paliWord, newTranslation);
-            };
-
-            inputEl.addEventListener('keydown', (evt) => {
-                if (evt.key === 'Enter') {
-                    evt.preventDefault();
-                    handleSave();
-                }
-            });
-
-            inputEl.addEventListener('blur', () => {
+        if (saveBtn) saveBtn.addEventListener('click', handleSave);
+        
+        inputEl.addEventListener('keydown', (evt) => {
+            if (evt.key === 'Enter') {
+                evt.preventDefault();
                 handleSave();
-            }, { once: true });
-        }
+            }
+        });
+    }
+}
+
+// ดักจับการกดปุ่ม F2 เพื่อแก้ไขคำแปล (สำหรับคอมพิวเตอร์)
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'F2') {
+        e.preventDefault();
+        triggerEditCurrentWord();
     }
 });
-
-// ส่งออกพจนานุกรมเป็นไฟล์ข้อความ Plain Text
-async function exportNewSysObj() {
-    let textLines = [];
-    for (const [word, trans] of Object.entries(dictionary)) {
-        textLines.push(`${word} – ${trans}`);
-    }
-    const fullText = textLines.join('\n');
-    
-    const blob = new Blob([fullText], { type: "text/plain;charset=utf-8" });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = 'mdic.txt';
-    link.click();
-}
 
 // ฟังก์ชันแสดงและจัดการตำแหน่งป๊อปอัป
 function updatePopup(text, targetElement = null, isBottomMode = false) {
@@ -227,7 +248,6 @@ function updatePopup(text, targetElement = null, isBottomMode = false) {
 
     popup.innerText = text;
 
-    // โหมดแปลเนื้อหาตัวเลข [๑] : ตรึงขอบล่างจอ
     if (isBottomMode) {
         popup.classList.add('bottom-mode', 'active');
         popup.style.top = '';
@@ -236,7 +256,6 @@ function updatePopup(text, targetElement = null, isBottomMode = false) {
         return;
     }
 
-    // โหมดแปลคำศัพท์ : Label ลอยชิดซ้ายคำศัพท์
     popup.classList.remove('bottom-mode');
     popup.classList.add('active');
 
@@ -400,18 +419,10 @@ function processWordAtPoint(clientX, clientY, isClickEvent = false) {
     while (end < t.length && t[end] !== ' ' && t[end] !== '\n' && t[end] !== '\t') end++;
     
     let rawWord = t.substring(start, end).trim();
-    if (!rawWord) {
-        if (!isClickEvent) {
-            clearHighlights();
-            updatePopup("");
-            lastProcessedWord = "";
-        }
-        return;
-    }
+    if (!rawWord) return;
 
     const cleanWord = rawWord.replace(/^[.,;:!?"”’‘'()«»\[\]\s]+|[.,;:!?"”’‘'()«»\[\]\s]+$/g, "").trim();
 
-    // หากเป็นคำเดิมที่แสดงอยู่แล้ว ให้ข้ามการประมวลผลซ้ำ (เว้นแต่เป็นการกดคลิก)
     if (!isClickEvent && cleanWord === lastProcessedWord && document.getElementById('popup')?.classList.contains('active')) {
         return;
     }
@@ -428,7 +439,6 @@ function processWordAtPoint(clientX, clientY, isClickEvent = false) {
     range.deleteContents();
     range.insertNode(span);
 
-    // ตรวจสอบว่าเป็นข้อความแปลตามหมวด [๑] หรือไม่
     const bracketMatch = rawWord.match(/\[[๑-๙๐-๙]+\]/);
     if (bracketMatch) {
         lastProcessedWord = rawWord;
@@ -445,7 +455,6 @@ function processWordAtPoint(clientX, clientY, isClickEvent = false) {
     lastProcessedWord = cleanWord;
     lastRequestedWord = cleanWord;
 
-    // ตรวจสอบในพจนานุกรม (ค้นรวมทั้ง mdic.txt, ai_words.txt, upmdic.txt และ LocalStorage)
     const lookupResult = checkPaliSandhi(cleanWord);
     if (lookupResult.found) {
         const trans = dictionary[lookupResult.word];
@@ -454,7 +463,6 @@ function processWordAtPoint(clientX, clientY, isClickEvent = false) {
         return;
     }
 
-    // ถ้าค้นในพจนานุกรมไม่พบ ส่งให้ เณร Zen AI ช่วยแปล
     updatePopup(`${cleanWord} – (กำลังให้ เณร Zen AI ช่วยแปล...)`, span);
     
     fetch(AI_TRANSLATE_URL, {
@@ -470,20 +478,14 @@ function processWordAtPoint(clientX, clientY, isClickEvent = false) {
         if (lastRequestedWord === cleanWord) {
             if (data && data.translation) {
                 const cleanTranslation = data.translation.replace(/^.*?\s–\s/, '').trim();
-                
-                // 1. บันทึกเข้า RAM ชั่วคราวเพื่อให้แสดงผลทันที
                 dictionary[cleanWord] = cleanTranslation;
 
-                // 2. บันทึกลง LocalStorage ของเครื่องผู้ใช้
                 try {
                     let localSaved = JSON.parse(localStorage.getItem('ai_added_words') || '{}');
                     localSaved[cleanWord] = cleanTranslation;
                     localStorage.setItem('ai_added_words', JSON.stringify(localSaved));
-                } catch (err) {
-                    console.error("Error saving to localStorage:", err);
-                }
+                } catch (err) {}
 
-                // 3. อัปเดต Popup แสดงผลคำแปล
                 updatePopup(`${cleanWord} – ${cleanTranslation}`, span);
             } else {
                 updatePopup(`${cleanWord} – ไม่พบคำแปล`, span);
@@ -491,39 +493,29 @@ function processWordAtPoint(clientX, clientY, isClickEvent = false) {
         }
     })
     .catch(err => {
-        console.error("AI Translation Error:", err);
         if (lastRequestedWord === cleanWord) {
             updatePopup(`${cleanWord} – ไม่พบคำแปลในระบบ`, span);
         }
     });
 }
 
-// ผูก Event Listeners สำหรับการชี้เมาส์ (Hover) และการคลิก/แตะหน้าจอ
+// ผูก Event Listeners สำหรับการชี้เมาส์ และการแตะหน้าจอ
 const paliContentDiv = document.getElementById('pali-content');
 if (paliContentDiv) {
-    // 1. เลื่อนเมาส์ชี้เพื่อแปลคำศัพท์ (สำหรับ Desktop / PC)
     paliContentDiv.addEventListener('mousemove', (e) => {
         clearTimeout(hoverTimer);
         hoverTimer = setTimeout(() => {
             processWordAtPoint(e.clientX, e.clientY, false);
-        }, 30); // หน่วง 30ms เพื่อความลื่นไหลของ UI
+        }, 30);
     });
 
-    // 2. คลิกเพื่อแปลคำศัพท์ (สำหรับ Mobile / Tablet หรือคลิกซ้ำ)
     paliContentDiv.addEventListener('click', (e) => {
         processWordAtPoint(e.clientX, e.clientY, true);
-    });
-
-    // 3. เมื่อเมาส์ออกจากพื้นที่อ่าน ให้ซ่อนป๊อปอัปและล้างไฮไลท์
-    paliContentDiv.addEventListener('mouseleave', () => {
-        clearTimeout(hoverTimer);
-        clearHighlights();
-        updatePopup("");
-        lastProcessedWord = "";
     });
 }
 
 loadDictionary();
+createFloatingEditButton();
 
 const modal = document.getElementById("about-modal");
 const btn = document.getElementById("about-btn");
@@ -533,11 +525,9 @@ if (btn) btn.onclick = () => { modal.style.display = "block"; }
 if (closeBtn) closeBtn.onclick = () => { modal.style.display = "none"; }
 window.onclick = (event) => { if (event.target == modal) modal.style.display = "none"; }
 
-// ลงทะเบียน Service Worker สำหรับ PWA (รองรับการใช้งานออฟไลน์)
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('./service-worker.js')
-            .then(reg => console.log('PWA Service Worker พร้อมใช้งาน:', reg.scope))
-            .catch(err => console.error('การลงทะเบียน Service Worker ล้มเหลว:', err));
+            .catch(err => console.error('PWA Error:', err));
     });
 }
