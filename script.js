@@ -3,48 +3,114 @@ let currentThaiContent = "";
 let lastRequestedWord = ""; 
 let lastProcessedWord = "";
 let hoverTimer = null;
-let localUpMdicHandle = null; // ตัวเก็บสิทธิ์การเขียนไฟล์ upmdic.txt บนฮาร์ดดิสก์
+let localUpMdicHandle = null; 
+
+// ตัวแปรเก็บขนาดตัวอักษร (เริ่มต้นที่ 1.15em)
+let currentFontSize = parseFloat(localStorage.getItem('pali_font_size')) || 1.15;
 
 // เรียก API บน Server ตัวเองโดยตรง
 const AI_TRANSLATE_URL = "/api/translate-word";
 
-// สร้างปุ่มวงกลมดินสอลอย (FAB) ที่มุมขวาล่างหน้าจออัตโนมัติ
-function createFloatingEditButton() {
-    if (document.getElementById('fab-edit-btn')) return;
+// ฟังก์ชันปรับขนาดตัวหนังสือในส่วนเนื้อหาพระไตรปิฎก
+function applyFontSize() {
+    const paliContent = document.getElementById('pali-content');
+    if (paliContent) {
+        paliContent.style.fontSize = `${currentFontSize}rem`;
+        paliContent.style.lineHeight = `${currentFontSize * 1.65}rem`;
+    }
+    localStorage.setItem('pali_font_size', currentFontSize);
+}
 
-    const fab = document.createElement('button');
-    fab.id = 'fab-edit-btn';
-    fab.innerHTML = '✏️';
-    fab.title = 'แก้ไขคำแปลคำศัพท์ที่เลือก';
-    fab.style.cssText = `
+// ฟังก์ชันสร้าง QR Code ตรงไปที่ URL ของโปรแกรม
+function generateQRCode() {
+    const qrImg = document.getElementById('app-qrcode');
+    if (qrImg) {
+        const targetUrl = encodeURIComponent("https://amulet500-cyber.github.io/SPali45/");
+        qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${targetUrl}`;
+    }
+}
+
+// ฟังก์ชันสร้างปุ่มลอยควบคุมหน้าจอ (ขยาย + / ย่อ - / แก้ไข ✏️)
+function createFloatingControls() {
+    if (document.getElementById('fab-controls-container')) return;
+
+    const container = document.createElement('div');
+    container.id = 'fab-controls-container';
+    container.style.cssText = `
         position: fixed;
-        bottom: 24px;
-        right: 24px;
-        width: 56px;
-        height: 56px;
-        border-radius: 50%;
-        background-color: #ffd700;
-        color: #3e2723;
-        border: 2px solid #3e2723;
-        font-size: 24px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        cursor: pointer;
-        z-index: 9999;
+        bottom: 20px;
+        right: 20px;
         display: flex;
+        flex-direction: column;
+        gap: 10px;
+        z-index: 9999;
         align-items: center;
-        justify-content: center;
-        transition: transform 0.2s, background-color 0.2s;
     `;
 
-    fab.addEventListener('mouseenter', () => { fab.style.transform = 'scale(1.1)'; });
-    fab.addEventListener('mouseleave', () => { fab.style.transform = 'scale(1.0)'; });
+    // ปุ่มขยายตัวหนังสือ (+)
+    const btnZoomIn = document.createElement('button');
+    btnZoomIn.innerHTML = '🔍+';
+    btnZoomIn.title = 'ขยายขนาดตัวหนังสือ';
+    btnZoomIn.style.cssText = getFabStyle('#ffffff', '#3e2723');
+    btnZoomIn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (currentFontSize < 2.5) {
+            currentFontSize = Math.round((currentFontSize + 0.1) * 100) / 100;
+            applyFontSize();
+        }
+    });
 
-    fab.addEventListener('click', (e) => {
+    // ปุ่มย่อตัวหนังสือ (-)
+    const btnZoomOut = document.createElement('button');
+    btnZoomOut.innerHTML = '🔍-';
+    btnZoomOut.title = 'ย่อขนาดตัวหนังสือ';
+    btnZoomOut.style.cssText = getFabStyle('#ffffff', '#3e2723');
+    btnZoomOut.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (currentFontSize > 0.8) {
+            currentFontSize = Math.round((currentFontSize - 0.1) * 100) / 100;
+            applyFontSize();
+        }
+    });
+
+    // ปุ่มแก้ไขคำแปล (✏️)
+    const btnEdit = document.createElement('button');
+    btnEdit.id = 'fab-edit-btn';
+    btnEdit.innerHTML = '✏️';
+    btnEdit.title = 'แก้ไขคำแปลคำศัพท์ที่เลือก';
+    btnEdit.style.cssText = getFabStyle('#c4a482', '#3e2723');
+    btnEdit.addEventListener('click', (e) => {
         e.stopPropagation();
         triggerEditCurrentWord();
     });
 
-    document.body.appendChild(fab);
+    container.appendChild(btnZoomIn);
+    container.appendChild(btnZoomOut);
+    container.appendChild(btnEdit);
+
+    document.body.appendChild(container);
+}
+
+// รูปแบบสไตล์ของปุ่มลอย
+function getFabStyle(bgColor, textColor) {
+    return `
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background-color: ${bgColor};
+        color: ${textColor};
+        border: 2px solid #5d4037;
+        font-size: 16px;
+        font-weight: bold;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: transform 0.15s, background-color 0.15s;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+    `;
 }
 
 // ฟังก์ชันเปิดโหมดแก้ไขคำศัพท์ล่าสุดที่เลือกอยู่
@@ -58,7 +124,7 @@ function triggerEditCurrentWord() {
     makePopupEditable(lastProcessedWord, currentTranslation);
 }
 
-// ฟังก์ชันแยกตัดบรรทัดเข้าพจนานุกรม (รองรับทั้ง " – ", "\t", และ " ")
+// ฟังก์ชันแยกตัดบรรทัดเข้าพจนานุกรม
 function parseAndAddToDict(textData) {
     if (!textData) return;
     textData.split('\n').forEach(line => {
@@ -188,10 +254,10 @@ function makePopupEditable(paliWord, currentTranslation) {
     popup.classList.add('active');
     popup.innerHTML = `
         <div style="display: flex; gap: 6px; align-items: center; pointer-events: auto;">
-            <span style="color: #ffd700; font-weight: bold; white-space: nowrap;">${paliWord} –</span>
+            <span style="color: #d2a679; font-weight: bold; white-space: nowrap;">${paliWord} –</span>
             <input type="text" id="edit-trans-input" value="${currentTranslation}" 
-                   style="font-size: 0.85em; padding: 4px 8px; border-radius: 6px; border: 1.5px solid #ffd700; background: #ffffff; color: #3e2723; outline: none; width: 180px; font-family: inherit;">
-            <button id="save-trans-btn" style="padding: 4px 8px; font-size: 0.8em; border: none; background: #ffd700; color: #3e2723; border-radius: 4px; cursor: pointer; font-weight: bold; white-space: nowrap;">บันทึก</button>
+                   style="font-size: 0.85em; padding: 4px 8px; border-radius: 6px; border: 1.5px solid #c4a482; background: #ffffff; color: #3e2723; outline: none; width: 180px; font-family: inherit;">
+            <button id="save-trans-btn" style="padding: 4px 8px; font-size: 0.8em; border: none; background: #c4a482; color: #3e2723; border-radius: 4px; cursor: pointer; font-weight: bold; white-space: nowrap;">บันทึก</button>
         </div>
     `;
 
@@ -343,6 +409,7 @@ if (selector) {
             paliText = paliText.replace(/^(\[[๑-๙๐-๙]+\])/gm, '<span class="pali-number" style="pointer-events: none;">$1</span>');
             contentDiv.innerHTML = paliText;
             currentThaiContent = await thaiRes.text();
+            applyFontSize(); // ปรับขนาดตัวอักษรเมื่อเปลี่ยนเล่ม
         } catch (err) { contentDiv.innerText = "ไม่พบไฟล์เล่มที่ " + bookNum; }
     });
 }
@@ -514,8 +581,11 @@ if (paliContentDiv) {
     });
 }
 
+// เรียกใช้งานฟังก์ชันเริ่มต้น
 loadDictionary();
-createFloatingEditButton();
+createFloatingControls();
+applyFontSize();
+generateQRCode();
 
 const modal = document.getElementById("about-modal");
 const btn = document.getElementById("about-btn");
