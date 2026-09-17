@@ -3,11 +3,41 @@ let currentThaiContent = "";
 let lastRequestedWord = ""; 
 let lastProcessedWord = "";
 let hoverTimer = null;
+let localUpMdicHandle = null; // ตัวเก็บสิทธิ์การเขียนไฟล์ upmdic.txt บนฮาร์ดดิสก์
 
 // เรียก API บน Server ตัวเองโดยตรง
 const AI_TRANSLATE_URL = "/api/translate-word";
 
-// โหลดพจนานุกรม (โหลดทั้ง mdic.txt และ ai_words.txt เข้าหน่วยความจำ RAM)
+// ฟังก์ชันแยกตัดบรรทัดเข้าพจนานุกรม (รองรับทั้ง " – ", "\t", และ " ")
+function parseAndAddToDict(textData) {
+    if (!textData) return;
+    textData.split('\n').forEach(line => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+        
+        let parts = [];
+        if (trimmed.includes(' – ')) {
+            parts = trimmed.split(' – ');
+        } else if (trimmed.includes('\t')) {
+            parts = trimmed.split('\t');
+        } else {
+            const spaceIdx = trimmed.indexOf(' ');
+            if (spaceIdx !== -1) {
+                parts = [trimmed.substring(0, spaceIdx), trimmed.substring(spaceIdx + 1)];
+            }
+        }
+
+        if (parts.length >= 2) {
+            const word = parts[0].trim();
+            const trans = parts.slice(1).join(' – ').trim();
+            if (word && trans) {
+                dictionary[word] = trans;
+            }
+        }
+    });
+}
+
+// โหลดพจนานุกรม (โหลด mdic.txt, ai_words.txt, upmdic.txt และ LocalStorage เข้า RAM)
 async function loadDictionary() {
     try {
         const cacheBuster = `?t=${Date.now()}`;
@@ -19,12 +49,7 @@ async function loadDictionary() {
         }
         if (response.ok) {
             const text = await response.text();
-            text.split('\n').forEach(line => {
-                const parts = line.split(' – ');
-                if (parts.length >= 2) {
-                    dictionary[parts[0].trim()] = parts.slice(1).join(' – ').trim();
-                }
-            });
+            parseAndAddToDict(text);
         }
 
         // 2. โหลดไฟล์ ai_words.txt (คำศัพท์ที่ AI เคยช่วยแปลไว้บน GitHub)
@@ -32,18 +57,30 @@ async function loadDictionary() {
             const aiResponse = await fetch(`ai_words.txt${cacheBuster}`, { cache: 'no-store' });
             if (aiResponse.ok) {
                 const aiText = await aiResponse.text();
-                aiText.split('\n').forEach(line => {
-                    const parts = line.split(' – ');
-                    if (parts.length >= 2) {
-                        dictionary[parts[0].trim()] = parts.slice(1).join(' – ').trim();
-                    }
-                });
+                parseAndAddToDict(aiText);
             }
         } catch (aiErr) {
             console.log("ยังไม่มีไฟล์ ai_words.txt บน GitHub หรือโหลดไม่สำเร็จ (ข้ามได้):", aiErr);
         }
 
-        // 3. ดึงคำแปลเพิ่มเติมที่เคยบันทึกไว้ใน LocalStorage มาทับซ้อน
+        // 3. โหลดไฟล์ upmdic.txt (คำศัพท์ที่เคยแก้ไขเพิ่มเติมไว้บนเซิร์ฟเวอร์/ฮาร์ดดิสก์)
+        try {
+            const upResponse = await fetch(`upmdic.txt${cacheBuster}`, { cache: 'no-store' });
+            if (upResponse.ok) {
+                const upText = await upResponse.text();
+                parseAndAddToDict(upText);
+                console.log("โหลด upmdic.txt สำเร็จ");
+            }
+        } catch (upErr) {
+            console.log("ยังไม่มีไฟล์ upmdic.txt บนเซิร์ฟเวอร์ (ข้ามได้):", upErr);
+        }
+
+        // 4. ดึงคำแปลที่เคยแก้ไขไว้ใน LocalStorage (upmdic_edits และ ai_added_words) มาทับซ้อนเป็นลำดับสุดท้าย
+        const localUpEdits = localStorage.getItem('upmdic_edits');
+        if (localUpEdits) {
+            parseAndAddToDict(localUpEdits);
+        }
+
         const localSaved = localStorage.getItem('ai_added_words');
         if (localSaved) {
             try {
@@ -57,6 +94,111 @@ async function loadDictionary() {
         console.error("โหลดพจนานุกรมล้มเหลว:", e); 
     }
 }
+
+// ฟังก์ชันบันทึกคำแปลที่แก้ไขลง upmdic.txt บนฮาร์ดดิสก์ และ LocalStorage
+async function saveToLocalUpMdic(paliWord, newMeaning) {
+    // 1. บันทึกลง RAM ทันที
+    dictionary[paliWord] = newMeaning;
+
+    // 2. บันทึกลง LocalStorage ของเบราว์เซอร์ไว้สำรอง
+    let currentData = localStorage.getItem('upmdic_edits') || '';
+    let lines = currentData.split('\n').filter(line => line.trim() !== '');
+    
+    let isFound = false;
+    lines = lines.map(line => {
+        if (line.startsWith(paliWord + ' – ') || line.startsWith(paliWord + '\t') || line.startsWith(paliWord + ' ')) {
+            isFound = true;
+            return `${paliWord} – ${newMeaning}`;
+        }
+        return line;
+    });
+
+    if (!isFound) {
+        lines.push(`${paliWord} – ${newMeaning}`);
+    }
+
+    const updatedText = lines.join('\n') + '\n';
+    localStorage.setItem('upmdic_edits', updatedText);
+
+    // 3. บันทึกลงไฟล์ upmdic.txt บนฮาร์ดดิสก์จริง
+    try {
+        if ('showSaveFilePicker' in window) {
+            if (!localUpMdicHandle) {
+                localUpMdicHandle = await window.showSaveFilePicker({
+                    suggestedName: 'upmdic.txt',
+                    types: [{
+                        description: 'Text File (*.txt)',
+                        accept: { 'text/plain': ['.txt'] }
+                    }]
+                });
+            }
+
+            const writable = await localUpMdicHandle.createWritable();
+            await writable.write(updatedText);
+            await writable.close();
+            console.log(`[บันทึกสำเร็จ] ${paliWord} -> upmdic.txt บนดิสก์`);
+        } else {
+            console.warn('เบราว์เซอร์นี้ไม่รองรับการเขียนไฟล์ลงดิสก์โดยตรง ระบบบันทึกลง LocalStorage แทนเรียบร้อย');
+        }
+    } catch (err) {
+        console.log('ยกเลิกการเลือกไฟล์ลงดิสก์ (ข้อมูลถูกเซฟไว้ใน LocalStorage เรียบร้อย):', err);
+    }
+}
+
+// ดักจับการกดปุ่ม F2 เพื่อแก้ไขคำแปล
+document.addEventListener('keydown', (e) => {
+    const popup = document.getElementById('popup');
+    
+    if (e.key === 'F2' && popup && popup.classList.contains('active')) {
+        e.preventDefault();
+
+        const currentText = popup.innerText.trim();
+        const parts = currentText.split('–');
+        const paliWord = parts[0] ? parts[0].trim() : "";
+        const currentTranslation = parts[1] ? parts[1].trim() : currentText;
+
+        popup.innerHTML = `
+            <div style="display: flex; gap: 6px; align-items: center; pointer-events: auto;">
+                <span style="color: #ffd700; font-weight: bold;">${paliWord} –</span>
+                <input type="text" id="edit-trans-input" value="${currentTranslation}" 
+                       style="font-size: 0.85em; padding: 4px 8px; border-radius: 6px; border: 1.5px solid #ffd700; background: #ffffff; color: #3e2723; outline: none; width: 240px; font-family: inherit;">
+            </div>
+        `;
+
+        const inputEl = document.getElementById('edit-trans-input');
+        if (inputEl) {
+            inputEl.focus();
+            inputEl.select();
+
+            let isSaved = false;
+
+            const handleSave = async () => {
+                if (isSaved) return;
+                isSaved = true;
+
+                const newTranslation = inputEl.value.trim();
+                if (!newTranslation) {
+                    popup.innerText = currentText;
+                    return;
+                }
+
+                popup.innerText = `${paliWord} – ${newTranslation}`;
+                await saveToLocalUpMdic(paliWord, newTranslation);
+            };
+
+            inputEl.addEventListener('keydown', (evt) => {
+                if (evt.key === 'Enter') {
+                    evt.preventDefault();
+                    handleSave();
+                }
+            });
+
+            inputEl.addEventListener('blur', () => {
+                handleSave();
+            }, { once: true });
+        }
+    }
+});
 
 // ส่งออกพจนานุกรมเป็นไฟล์ข้อความ Plain Text
 async function exportNewSysObj() {
@@ -303,7 +445,7 @@ function processWordAtPoint(clientX, clientY, isClickEvent = false) {
     lastProcessedWord = cleanWord;
     lastRequestedWord = cleanWord;
 
-    // ตรวจสอบในพจนานุกรม (ค้นรวมทั้ง mdic.txt, ai_words.txt และ LocalStorage)
+    // ตรวจสอบในพจนานุกรม (ค้นรวมทั้ง mdic.txt, ai_words.txt, upmdic.txt และ LocalStorage)
     const lookupResult = checkPaliSandhi(cleanWord);
     if (lookupResult.found) {
         const trans = dictionary[lookupResult.word];
@@ -390,3 +532,12 @@ const closeBtn = document.querySelector(".close-btn");
 if (btn) btn.onclick = () => { modal.style.display = "block"; }
 if (closeBtn) closeBtn.onclick = () => { modal.style.display = "none"; }
 window.onclick = (event) => { if (event.target == modal) modal.style.display = "none"; }
+
+// ลงทะเบียน Service Worker สำหรับ PWA (รองรับการใช้งานออฟไลน์)
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./service-worker.js')
+            .then(reg => console.log('PWA Service Worker พร้อมใช้งาน:', reg.scope))
+            .catch(err => console.error('การลงทะเบียน Service Worker ล้มเหลว:', err));
+    });
+}
