@@ -5,10 +5,9 @@ let lastProcessedWord = "";
 let hoverTimer = null;
 let localUpMdicHandle = null; 
 
-// ตัวแปรเก็บขนาดตัวอักษร (เริ่มต้นที่ 1.15em)
+// ตัวแปรเก็บขนาดตัวอักษร
 let currentFontSize = parseFloat(localStorage.getItem('pali_font_size')) || 1.15;
 
-// เรียก API บน Server ตัวเองโดยตรง
 const AI_TRANSLATE_URL = "/api/translate-word";
 
 // ฟังก์ชันปรับขนาดตัวหนังสือในส่วนเนื้อหาพระไตรปิฎก
@@ -21,16 +20,84 @@ function applyFontSize() {
     localStorage.setItem('pali_font_size', currentFontSize);
 }
 
-// ฟังก์ชันสร้าง QR Code ตรงไปที่ URL ของโปรแกรม
+// ฟังก์ชันสร้าง QR Code
 function generateQRCode() {
+    const targetUrl = encodeURIComponent("https://amulet500-cyber.github.io/SPali45/");
+    const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${targetUrl}`;
+    
     const qrImg = document.getElementById('app-qrcode');
-    if (qrImg) {
-        const targetUrl = encodeURIComponent("https://amulet500-cyber.github.io/SPali45/");
-        qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${targetUrl}`;
+    if (qrImg) qrImg.src = qrSrc;
+
+    const modalQrImg = document.getElementById('modal-qrcode');
+    if (modalQrImg) modalQrImg.src = qrSrc;
+}
+
+// บันทึกตำแหน่งอ่านล่าสุด (Auto-Bookmark)
+window.addEventListener('scroll', () => {
+    let st = window.pageYOffset || document.documentElement.scrollTop;
+    const currentBook = document.getElementById('book-selector')?.value;
+    if (currentBook) {
+        localStorage.setItem(`pali_scroll_pos_b${currentBook}`, st);
+    }
+}, { passive: true });
+
+// แปลงตัวเลขอารบิกเป็นเลขไทย
+function toThaiNumerals(numStr) {
+    const thaiDigits = ['๐', '๑', '๒', '๓', '๔', '๕', '๖', '๗', '๘', '๙'];
+    return numStr.toString().replace(/[0-9]/g, w => thaiDigits[+w]);
+}
+
+// ฟังก์ชันกระโดดไปยังเลขข้อ [๑]
+function jumpToTopicPrompt() {
+    const userInput = prompt("กรอกเลขข้อที่ต้องการอ่าน (เช่น 15 หรือ ๑๕):");
+    if (!userInput || !userInput.trim()) return;
+
+    let rawVal = userInput.trim();
+    let thaiVal = toThaiNumerals(rawVal);
+    let targetText = `[${thaiVal}]`;
+
+    const spanList = document.querySelectorAll('.pali-number');
+    let found = false;
+
+    spanList.forEach(span => {
+        if (span.textContent.trim() === targetText) {
+            span.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            span.style.transition = 'background-color 0.5s';
+            span.style.backgroundColor = '#ff6f00';
+            setTimeout(() => { span.style.backgroundColor = ''; }, 2000);
+            found = true;
+        }
+    });
+
+    if (!found) {
+        alert(`ไม่พบข้อ ${targetText} ในเล่มนี้ครับ`);
     }
 }
 
-// ฟังก์ชันสร้างปุ่มลอยควบคุมหน้าจอ (ขยาย + / ย่อ - / แก้ไข ✏️)
+// ฟังก์ชันวนสลับธีมปรับแสงการอ่าน
+function cycleTheme() {
+    const themes = [
+        { key: 'theme-sepia', icon: '📜', name: 'ถนอมสายตา' },
+        { key: 'theme-dark', icon: '🌙', name: 'โหมดมืด' },
+        { key: 'theme-light', icon: '☀️', name: 'โหมดสว่าง' }
+    ];
+
+    let currentTheme = localStorage.getItem('pali_theme') || 'theme-sepia';
+    let currentIndex = themes.findIndex(t => t.key === currentTheme);
+    let nextIndex = (currentIndex + 1) % themes.length;
+    let nextTheme = themes[nextIndex];
+
+    document.body.className = nextTheme.key;
+    localStorage.setItem('pali_theme', nextTheme.key);
+
+    const themeBtn = document.getElementById('fab-theme-btn');
+    if (themeBtn) {
+        themeBtn.innerHTML = nextTheme.icon;
+        themeBtn.title = `โหมดปรับแสง: ${nextTheme.name}`;
+    }
+}
+
+// ฟังก์ชันสร้างกลุ่มปุ่มลอยข้างขวา (FAB Panel) รวมทุกเครื่องมือ
 function createFloatingControls() {
     if (document.getElementById('fab-controls-container')) return;
 
@@ -38,16 +105,88 @@ function createFloatingControls() {
     container.id = 'fab-controls-container';
     container.style.cssText = `
         position: fixed;
-        bottom: 20px;
-        right: 20px;
+        bottom: 16px;
+        right: 16px;
         display: flex;
         flex-direction: column;
-        gap: 10px;
+        gap: 8px;
         z-index: 9999;
         align-items: center;
+        max-height: 85vh;
+        overflow-y: auto;
+        padding-right: 4px;
     `;
 
-    // ปุ่มขยายตัวหนังสือ (+)
+    // 1. ปุ่มปรับแสง/ธีมอ่าน (📜/🌙/☀️)
+    const currentTheme = localStorage.getItem('pali_theme') || 'theme-sepia';
+    let initialIcon = '📜';
+    if (currentTheme === 'theme-dark') initialIcon = '🌙';
+    if (currentTheme === 'theme-light') initialIcon = '☀️';
+
+    const btnTheme = document.createElement('button');
+    btnTheme.id = 'fab-theme-btn';
+    btnTheme.innerHTML = initialIcon;
+    btnTheme.title = 'ปรับแสง/ธีมการอ่าน';
+    btnTheme.style.cssText = getFabStyle('#ffffff', '#3e2723');
+    btnTheme.addEventListener('click', (e) => {
+        e.stopPropagation();
+        cycleTheme();
+    });
+
+    // 2. ปุ่มไปที่หัวข้อ/เลขข้อ (🎯)
+    const btnJump = document.createElement('button');
+    btnJump.innerHTML = '🎯';
+    btnJump.title = 'ค้นหา/กระโดดไปที่เลขข้อ [๑]';
+    btnJump.style.cssText = getFabStyle('#ffffff', '#3e2723');
+    btnJump.addEventListener('click', (e) => {
+        e.stopPropagation();
+        jumpToTopicPrompt();
+    });
+
+    // 3. ปุ่มแสดง QR Code (📱)
+    const btnQr = document.createElement('button');
+    btnQr.innerHTML = '📱';
+    btnQr.title = 'แสดง QR Code สแกนเข้าใช้งาน';
+    btnQr.style.cssText = getFabStyle('#ffffff', '#3e2723');
+    btnQr.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const qrModal = document.getElementById('qr-modal');
+        if (qrModal) qrModal.style.display = 'block';
+    });
+
+    // 4. ปุ่มส่งออกศัพท์ (📥)
+    const btnExport = document.createElement('button');
+    btnExport.innerHTML = '📥';
+    btnExport.title = 'ส่งออกคำศัพท์ที่แก้ไข (Export)';
+    btnExport.style.cssText = getFabStyle('#ffffff', '#3e2723');
+    btnExport.addEventListener('click', (e) => {
+        e.stopPropagation();
+        exportWords();
+    });
+
+    // 5. ปุ่มนำเข้าศัพท์ (📤)
+    const btnImport = document.createElement('button');
+    btnImport.innerHTML = '📤';
+    btnImport.title = 'นำเข้าคำศัพท์ที่แก้ไข (Import)';
+    btnImport.style.cssText = getFabStyle('#ffffff', '#3e2723');
+    btnImport.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const fileInput = document.getElementById('import-file-input');
+        if (fileInput) fileInput.click();
+    });
+
+    // 6. ปุ่มเกี่ยวกับผู้เขียน (ℹ️)
+    const btnAbout = document.createElement('button');
+    btnAbout.innerHTML = 'ℹ️';
+    btnAbout.title = 'เกี่ยวกับผู้เขียน';
+    btnAbout.style.cssText = getFabStyle('#ffffff', '#3e2723');
+    btnAbout.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const aboutModal = document.getElementById('about-modal');
+        if (aboutModal) aboutModal.style.display = 'block';
+    });
+
+    // 7. ปุ่มขยายตัวหนังสือ (🔍+)
     const btnZoomIn = document.createElement('button');
     btnZoomIn.innerHTML = '🔍+';
     btnZoomIn.title = 'ขยายขนาดตัวหนังสือ';
@@ -60,7 +199,7 @@ function createFloatingControls() {
         }
     });
 
-    // ปุ่มย่อตัวหนังสือ (-)
+    // 8. ปุ่มย่อตัวหนังสือ (🔍-)
     const btnZoomOut = document.createElement('button');
     btnZoomOut.innerHTML = '🔍-';
     btnZoomOut.title = 'ย่อขนาดตัวหนังสือ';
@@ -73,7 +212,7 @@ function createFloatingControls() {
         }
     });
 
-    // ปุ่มแก้ไขคำแปล (✏️)
+    // 9. ปุ่มแก้ไขคำแปล (✏️)
     const btnEdit = document.createElement('button');
     btnEdit.id = 'fab-edit-btn';
     btnEdit.innerHTML = '✏️';
@@ -84,6 +223,12 @@ function createFloatingControls() {
         triggerEditCurrentWord();
     });
 
+    container.appendChild(btnTheme);
+    container.appendChild(btnJump);
+    container.appendChild(btnQr);
+    container.appendChild(btnExport);
+    container.appendChild(btnImport);
+    container.appendChild(btnAbout);
     container.appendChild(btnZoomIn);
     container.appendChild(btnZoomOut);
     container.appendChild(btnEdit);
@@ -91,18 +236,18 @@ function createFloatingControls() {
     document.body.appendChild(container);
 }
 
-// รูปแบบสไตล์ของปุ่มลอย
+// รูปแบบสไตล์ของปุ่มลอยขนาดพอดีกระชับ
 function getFabStyle(bgColor, textColor) {
     return `
-        width: 48px;
-        height: 48px;
+        width: 44px;
+        height: 44px;
         border-radius: 50%;
         background-color: ${bgColor};
         color: ${textColor};
         border: 2px solid #5d4037;
-        font-size: 16px;
+        font-size: 15px;
         font-weight: bold;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.25);
         cursor: pointer;
         display: flex;
         align-items: center;
@@ -110,7 +255,47 @@ function getFabStyle(bgColor, textColor) {
         transition: transform 0.15s, background-color 0.15s;
         user-select: none;
         -webkit-tap-highlight-color: transparent;
+        flex-shrink: 0;
     `;
+}
+
+// ฟังก์ชันส่งออกคำศัพท์
+function exportWords() {
+    const data = localStorage.getItem('upmdic_edits') || '';
+    if (!data.trim()) {
+        alert("ยังไม่มีรายการคำศัพท์ที่ถูกแก้ไขเพิ่มเติมครับ");
+        return;
+    }
+    const blob = new Blob([data], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'upmdic_edits.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+// ระบบนำเข้าคำศัพท์
+function setupImportSystem() {
+    const importInput = document.getElementById('import-file-input');
+    if (importInput) {
+        importInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                const text = evt.target.result;
+                if (text) {
+                    parseAndAddToDict(text);
+                    let existing = localStorage.getItem('upmdic_edits') || '';
+                    localStorage.setItem('upmdic_edits', existing + '\n' + text);
+                    alert("นำเข้าคำศัพท์แก้ไขเพิ่มเติมเรียบร้อยแล้วครับ!");
+                }
+            };
+            reader.readAsText(file);
+        });
+    }
 }
 
 // ฟังก์ชันเปิดโหมดแก้ไขคำศัพท์ล่าสุดที่เลือกอยู่
@@ -253,11 +438,11 @@ function makePopupEditable(paliWord, currentTranslation) {
 
     popup.classList.add('active');
     popup.innerHTML = `
-        <div style="display: flex; gap: 6px; align-items: center; pointer-events: auto;">
-            <span style="color: #d2a679; font-weight: bold; white-space: nowrap;">${paliWord} –</span>
+        <div style="display: flex; gap: 8px; align-items: center; pointer-events: auto;">
+            <span style="color: #3e2723; font-weight: bold; white-space: nowrap; font-size: 1.2rem;">${paliWord} –</span>
             <input type="text" id="edit-trans-input" value="${currentTranslation}" 
-                   style="font-size: 0.85em; padding: 4px 8px; border-radius: 6px; border: 1.5px solid #c4a482; background: #ffffff; color: #3e2723; outline: none; width: 180px; font-family: inherit;">
-            <button id="save-trans-btn" style="padding: 4px 8px; font-size: 0.8em; border: none; background: #c4a482; color: #3e2723; border-radius: 4px; cursor: pointer; font-weight: bold; white-space: nowrap;">บันทึก</button>
+                   style="font-size: 1.1rem; padding: 6px 10px; border-radius: 6px; border: 1.5px solid #fbc02d; background: #ffffff; color: #3e2723; outline: none; width: 200px; font-family: inherit;">
+            <button id="save-trans-btn" style="padding: 6px 12px; font-size: 1rem; border: none; background: #fbc02d; color: #3e2723; border-radius: 6px; cursor: pointer; font-weight: bold; white-space: nowrap;">บันทึก</button>
         </div>
     `;
 
@@ -330,9 +515,9 @@ function updatePopup(text, targetElement = null, isBottomMode = false) {
         const scrollLeft = window.scrollX || window.pageXOffset || document.documentElement.scrollLeft;
         const scrollTop = window.scrollY || window.pageYOffset || document.documentElement.scrollTop;
 
-        let topPos = rect.top + scrollTop - 8;
-        if (rect.top < 60) {
-            topPos = rect.bottom + scrollTop + 8;
+        let topPos = rect.top + scrollTop - 10;
+        if (rect.top < 70) {
+            topPos = rect.bottom + scrollTop + 10;
             popup.style.transform = 'translate(0, 0)';
         } else {
             popup.style.transform = 'translate(0, -100%)';
@@ -343,7 +528,7 @@ function updatePopup(text, targetElement = null, isBottomMode = false) {
         popup.style.left = leftPos + 'px';
 
         requestAnimationFrame(() => {
-            const popupWidth = popup.offsetWidth || 200;
+            const popupWidth = popup.offsetWidth || 240;
             const windowWidth = window.innerWidth;
 
             if (leftPos + popupWidth > windowWidth - 15) {
@@ -395,23 +580,40 @@ if (selector) {
 
     selector.addEventListener('change', async (e) => {
         const bookNum = e.target.value;
-        const contentDiv = document.getElementById('pali-content');
-        if (!contentDiv) return;
+        if (!bookNum) return;
 
-        contentDiv.innerText = "กำลังโหลด...";
-        currentThaiContent = "";
-        lastProcessedWord = "";
-        clearHighlights();
-        updatePopup(""); 
-        try {
-            const [paliRes, thaiRes] = await Promise.all([fetch(`b${bookNum}.txt`), fetch(`t${bookNum}.txt`)]);
-            let paliText = await paliRes.text();
-            paliText = paliText.replace(/^(\[[๑-๙๐-๙]+\])/gm, '<span class="pali-number" style="pointer-events: none;">$1</span>');
-            contentDiv.innerHTML = paliText;
-            currentThaiContent = await thaiRes.text();
-            applyFontSize(); // ปรับขนาดตัวอักษรเมื่อเปลี่ยนเล่ม
-        } catch (err) { contentDiv.innerText = "ไม่พบไฟล์เล่มที่ " + bookNum; }
+        localStorage.setItem('pali_last_book', bookNum);
+        await loadBookContent(bookNum);
     });
+}
+
+// ฟังก์ชันโหลดเนื้อหาเล่มพระไตรปิฎก
+async function loadBookContent(bookNum) {
+    const contentDiv = document.getElementById('pali-content');
+    if (!contentDiv) return;
+
+    contentDiv.innerText = "กำลังโหลด...";
+    currentThaiContent = "";
+    lastProcessedWord = "";
+    clearHighlights();
+    updatePopup(""); 
+
+    try {
+        const [paliRes, thaiRes] = await Promise.all([fetch(`b${bookNum}.txt`), fetch(`t${bookNum}.txt`)]);
+        let paliText = await paliRes.text();
+        paliText = paliText.replace(/^(\[[๑-๙๐-๙]+\])/gm, '<span class="pali-number" style="pointer-events: none;">$1</span>');
+        contentDiv.innerHTML = paliText;
+        currentThaiContent = await thaiRes.text();
+        applyFontSize();
+
+        // ย้อนกลับไปยังตำแหน่งอ่านล่าสุดในเล่มนี้ (Auto-Bookmark)
+        const savedScroll = localStorage.getItem(`pali_scroll_pos_b${bookNum}`);
+        if (savedScroll) {
+            setTimeout(() => { window.scrollTo({ top: parseInt(savedScroll), behavior: 'smooth' }); }, 200);
+        }
+    } catch (err) { 
+        contentDiv.innerText = "ไม่พบไฟล์เล่มที่ " + bookNum; 
+    }
 }
 
 function getRangeFromPoint(x, y) {
@@ -581,19 +783,37 @@ if (paliContentDiv) {
     });
 }
 
-// เรียกใช้งานฟังก์ชันเริ่มต้น
+// เรียกใช้งานฟังก์ชันเริ่มต้นทั้งหมด
 loadDictionary();
 createFloatingControls();
 applyFontSize();
 generateQRCode();
+setupImportSystem();
 
-const modal = document.getElementById("about-modal");
-const btn = document.getElementById("about-btn");
-const closeBtn = document.querySelector(".close-btn");
+// โหลดธีมตั้งต้น
+const savedTheme = localStorage.getItem('pali_theme') || 'theme-sepia';
+document.body.className = savedTheme;
 
-if (btn) btn.onclick = () => { modal.style.display = "block"; }
-if (closeBtn) closeBtn.onclick = () => { modal.style.display = "none"; }
-window.onclick = (event) => { if (event.target == modal) modal.style.display = "none"; }
+// โหลดเล่มล่าสุดที่เคยเปิดค้างไว้
+const lastBook = localStorage.getItem('pali_last_book');
+if (lastBook && selector) {
+    selector.value = lastBook;
+    loadBookContent(lastBook);
+}
+
+// จัดการ Modal ต่างๆ
+const aboutModal = document.getElementById("about-modal");
+const closeAboutBtn = document.getElementById("close-about-modal");
+if (closeAboutBtn) closeAboutBtn.onclick = () => { aboutModal.style.display = "none"; }
+
+const qrModal = document.getElementById("qr-modal");
+const closeQrBtn = document.getElementById("close-qr-modal");
+if (closeQrBtn) closeQrBtn.onclick = () => { qrModal.style.display = "none"; }
+
+window.onclick = (event) => { 
+    if (event.target == aboutModal) aboutModal.style.display = "none"; 
+    if (event.target == qrModal) qrModal.style.display = "none"; 
+}
 
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {

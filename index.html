@@ -2,7 +2,6 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <!-- เปิดรองรับ user-scalable ให้ถ่างนิ้วย่อขยายหน้าจอในมือถือได้ -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <title>พระไตรปิฎกบาลีสยามรัฐ ฉบับบาลีศึกษา</title>
     
@@ -13,7 +12,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
     <meta name="apple-mobile-web-app-title" content="คลังพระไตรปิฎก">
 </head>
-<body>
+<body class="theme-sepia">
     <div class="app-container">
         <!-- ส่วนหัว -->
         <header class="app-header">
@@ -30,34 +29,45 @@
         <main class="main-content">
             <div id="pali-content">
                 <div style="text-align: center; padding: 20px 10px;">
-                    <p style="font-size: 1.1em; color: #3e2723; margin-bottom: 15px;">
+                    <p style="font-size: 1.1em; margin-bottom: 15px;">
                         โปรดเลือกเล่มจากรายการด้านบน เพื่อเริ่มอ่านพระไตรปิฎก
                     </p>
                     
-                    <!-- กล่องแสดง QR Code สแกนเข้าใช้งาน -->
-                    <div style="display: inline-block; padding: 16px; background: #ffffff; border-radius: 12px; border: 1px solid #d2a679; box-shadow: 0 4px 10px rgba(0,0,0,0.08);">
-                        <img id="app-qrcode" src="" alt="QR Code สแกนเข้าใช้งาน" style="width: 180px; height: 180px; display: block; margin: 0 auto 8px auto;">
-                        <span style="font-size: 0.85em; color: #5d4037; font-weight: bold;">สแกน QR Code เพื่อเข้าใช้งานโปรแกรม</span>
+                    <div class="qr-card">
+                        <img id="app-qrcode" src="" alt="QR Code สแกนเข้าใช้งาน">
+                        <span>สแกน QR Code เพื่อเข้าใช้งานโปรแกรม</span>
                     </div>
                 </div>
             </div>
             
             <div id="translation-box"></div>
             <div id="dictionary-box"></div>
-            
-            <div class="footer">
-                <button id="about-btn">เกี่ยวกับผู้เขียน</button>
-            </div>
         </main>
     </div>
+
+    <!-- ปุ่มซ่อนไฟล์นำเข้า -->
+    <input type="file" id="import-file-input" accept=".txt,.json" style="display: none;">
 
     <!-- ป๊อปอัปคำแปล -->
     <div id="popup"></div>
 
+    <!-- Modal QR Code -->
+    <div id="qr-modal" class="modal">
+        <div class="modal-content" style="text-align: center;">
+            <span class="close-btn" id="close-qr-modal">&times;</span>
+            <h2 style="margin-top: 0; color: #3e2723; font-size: 1.2rem;">สแกน QR Code เพื่อเข้าใช้งานโปรแกรม</h2>
+            <div class="qr-card" style="box-shadow: none; border: none; padding: 0;">
+                <img id="modal-qrcode" src="" alt="QR Code" style="width: 220px; height: 220px; margin: 10px auto;">
+            </div>
+            <p style="font-size: 0.85rem; color: #5d4037; margin-bottom: 0;">https://amulet500-cyber.github.io/SPali45/</p>
+        </div>
+    </div>
+
     <!-- Modal ข้อมูลผู้เขียน -->
     <div id="about-modal" class="modal">
         <div class="modal-content">
-            <span class="close-btn">&times;</span>
+            <span class="close-btn" id="close-about-modal">&times;</span>
+            <h3 style="margin-top:0; color: #3e2723;">เกี่ยวกับผู้เขียน</h3>
             <p>จัดทำขึ้นเป็นธรรมทาน แด่ พระภิกษุ สามเณร และผู้สนใจในธรรม ทุกท่าน และลูกชาย สามเณร ZEN วัดระฆัง ที่บวชเรียนพระบาลี ขอท่านทั้งหลาย อนุโมทนาร่วมกัน ได้กุศลผลบุญร่วมกันถ้วนหน้า เรารู้แล้วจักให้ผู้อื่นรู้ด้วย พุทโธ โหมิ .... </p>
         </div>
     </div>
